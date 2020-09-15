@@ -1,0 +1,40 @@
+module RAND_L(d,q,pwr);
+inout d,q;
+input pwr;
+
+electrical d,q,pwr;
+
+parameter real VRATING = 230k alterable;
+parameter real P = 100k       alterable;
+parameter real Q = 0          alterable;
+
+parameter real VMAX = VRATING * 1.2 alterable;
+parameter real VMIN = VRATING * 0.8 alterable;
+
+real Vd, Vq, Mag, Pwr, SqrMag;
+
+analog begin
+
+    Vd = v(d);
+    Vq = v(q);
+
+    SqrMag = Vd*Vd + Vq*Vq;
+
+    if( SqrMag < VMIN * VMIN ) begin
+        SqrMag = VMIN * VMIN;
+    end
+    else if( SqrMag > VMAX * VMAX ) begin
+	Mag = sqrt( SqrMag );
+	Vd  = Vd * VMAX / Mag;
+	Vq  = Vq * VMAX / Mag;
+    end
+
+//    Pwr = transition(v(pwr) * P,0,10m);
+    Pwr = v(pwr) * P;
+
+    i(d) <+ (Vd*Pwr + Vq*Q) / SqrMag;
+    i(q) <+ (Vq*Pwr - Vd*Q) / SqrMag;
+
+end
+
+endmodule

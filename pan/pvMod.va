@@ -1,0 +1,45 @@
+module PV(pos,neg,T,S);
+inout pos,neg;
+input T,S;
+
+electrical pos,neg,curr;
+electrical T,S;
+
+parameter real    NS   = 36;
+parameter real    S0   = 1000; 
+parameter real    TREF = 25; 
+parameter real    RS   = 5m; 
+parameter real    RSH  = 1000;
+parameter real    ISC0 = 5;
+parameter real    IS0  = 1.16e-8;
+parameter real    EG   = 1.12;
+parameter real    A    = 1.2;
+parameter real    CT   = 3.25m;
+parameter real    KS   = 0;
+
+real Vd, Iph, Id, Ir, Io;
+real TempC, TempK;
+real TrefK;
+
+analog begin
+
+    @(initial_model) begin
+        TrefK = TREF + zero_celsius;
+    end
+
+    Vd    = v(pos,neg)/NS + v(curr)*RS;
+    TempC = v(T) + KS * v(S);
+    TempK = TempC + zero_celsius;
+
+    Iph = ISC0 * v(S)/S0 + CT*(TempC - TREF);
+    Io  = IS0 * pow(TempK/TrefK,3) * limexp(electron_charge*EG/(A*boltzmann)*(1/TrefK - 1/TempK));
+    Id  = Io * (limexp(electron_charge*Vd/(A*boltzmann*TempK)) - 1);
+    Ir  = Vd / RSH;
+
+    v(curr) <+ Iph - Id - Ir;
+
+    i(pos,neg) <+ -v(curr);
+
+end
+
+endmodule
