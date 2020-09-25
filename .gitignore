@@ -3,4 +3,5 @@ parameter_extraction_models
 .pan
 *.log
 *.mat
+.DS_Store
 *~

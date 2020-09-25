@@ -3,7 +3,10 @@ close all;
 clc;
 addpath /home/daniele/Research/MPanSuite
 MPanSuiteInit;
-rng('default');
+fid = fopen('/dev/random', 'rb');
+hw_seed = mod( fread(fid, 1, 'uint32'), 1000000 );
+fclose(fid);
+rng(hw_seed);
 
 %%
 
@@ -26,9 +29,6 @@ N_H = length(H);
 %%% how many trials per inertia value
 N_trials = 100;
 random_seeds = randi(1000000, [N_H, N_trials]);
-% fid = fopen('/dev/random', 'rb');
-% random_seeds = mod( fread(fid, [N_H, N_trials], 'uint32'), 1000000 );
-% fclose(fid);
 
 dt = 1 / frand;
 t = dt + (0 : dt : tstop)';
@@ -99,6 +99,6 @@ for i = 1 : N_H
 
     out_file = sprintf('ieee14_%s_set_H_%.3f.mat', suffix, H(i));
     save(out_file, 'time', 'omega_G1', 'omega_G2', 'omega_G3', 'omega_G6', ...
-        'omega_G8', 'omega_coi', 'seeds', 'inertia', 'noise');
+        'omega_G8', 'omega_coi', 'seeds', 'inertia', 'noise', 'hw_seed');
 end
 
