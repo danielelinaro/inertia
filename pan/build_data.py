@@ -1,10 +1,8 @@
 
 import os
 import sys
-import struct
 import argparse as arg
 import numpy as np
-from numpy.random import randint, RandomState, SeedSequence, MT19937
 
 import pypan.ui as pan
 
@@ -32,8 +30,8 @@ if __name__ == '__main__':
     args = parser.parse_args(args=sys.argv[1:])
     
     with open('/dev/random', 'rb') as fid:
-        hw_seed = struct.unpack('i', fid.read(4))[0] % 1000000
-    rs = RandomState(MT19937(SeedSequence(hw_seed)))
+        hw_seed = int.from_bytes(fid.read(4), 'little') % 1000000
+    np.random.seed(hw_seed)
     
     # OU parameters
     alpha = args.alpha
@@ -59,7 +57,7 @@ if __name__ == '__main__':
 
     # how many trials per inertia value
     N_trials = args.n_trials
-    random_seeds = randint(low=0, high=1000000, size=(N_H, N_trials))
+    random_seeds = np.random.randint(low=0, high=1000000, size=(N_H, N_trials))
 
     dt = 1 / frand
     t = dt + np.r_[0 : tstop + dt/2 : dt]
@@ -90,6 +88,8 @@ if __name__ == '__main__':
     mem_vars = ['time:noise', 'omega01:noise', 'omega02:noise', \
                 'G3:omega:noise', 'G6:omega:noise', \
                 'G8:omega:noise', 'omegacoi:noise']
+    #disk_vars = ['agc02','drift14','omega*','pm','bus13']
+    disk_vars = ['pm']
 
     output_dir = args.output_dir
     if not os.path.isdir(output_dir):
@@ -107,7 +107,7 @@ if __name__ == '__main__':
 
         for j in range(N_trials):
 
-            rs = RandomState(MT19937(SeedSequence(random_seeds[i,j])))
+            np.random.seed(random_seeds[i,j])
             rnd = c * np.sqrt(dt) * np.random.normal(size=N_samples)
 
             for k in range(N_samples-1):
@@ -119,7 +119,7 @@ if __name__ == '__main__':
             data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=2, maxord=2, \
                             noisefmax=frand/2, noiseinj=2, seed=random_seeds[i,j], \
                             iabstol=1e-6, devvars=1, tmax=0.1, annotate=1, \
-                            savelist='["agc02","drift14","omega*","pm","bus13"]')
+                            savelist='["' + '","'.join(disk_vars) + '"]')
 
             omega_G1[j,:]  = data[1,:]
             omega_G2[j,:]  = data[2,:]

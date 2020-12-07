@@ -1,7 +1,9 @@
+inertia
 .ipynb_checkpoints
-parameter_extraction_models
 .pan
+.DS_Store
 *.log
 *.mat
-.DS_Store
+*.npz
+*.raw
 *~
