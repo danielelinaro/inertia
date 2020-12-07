@@ -7,26 +7,7 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
-
-
-def load_one_block(filename, varname, trial_dur = 60, verbose = False):
-    """
-    This function loads a single data file containing the results of the simulations for one value of inertia
-    """
-    data = np.load(filename)
-    orig_n_trials, orig_n_samples = data[varname].shape
-    dt = np.diff(data['time'][:2])[0]
-    n_samples = int(trial_dur / dt)
-    n_trials = int(orig_n_trials * orig_n_samples / n_samples)
-    var = np.reshape(data[varname], [n_trials, n_samples], order='C')
-    time = data['time'][:n_samples]
-    if verbose:
-        print('There are {} trials, each of which contains {} samples.'.\
-              format(n_trials, n_samples))
-    return tf.constant(time, dtype=tf.float32), \
-           tf.constant(var, dtype=tf.float32), \
-           tf.constant([float(data['inertia']) for _ in range(n_trials)], \
-                       shape=(n_trials,1), dtype=tf.float32)
+from deep_utils import *
 
 
 def build_network(depth_level = 1, learning_rate = 1e-4, dropout_coeff = None, loss_function = 'mae', optimizer = 'adam', full_output = False):
@@ -82,7 +63,7 @@ def build_network(depth_level = 1, learning_rate = 1e-4, dropout_coeff = None, l
     if dropout_coeff is not None:
         model.add(tf.keras.layers.Dropout(dropout_coeff))
 
-    model.add(tf.keras.layers.Dense(y['train'].shape[1]))
+    model.add(tf.keras.layers.Dense(y['training'].shape[1]))
 
     model.compile(optimizer=optimizer, loss=loss)
 
@@ -109,11 +90,11 @@ def train_network(model, x, y, N_epochs, batch_size, steps_per_epoch = None, out
                                                      verbose=0)
 
     if steps_per_epoch is None:
-        N_batches = np.ceil(x['train'].shape[0] / batch_size)
+        N_batches = np.ceil(x['training'].shape[0] / batch_size)
         steps_per_epoch = np.max([N_batches, 100])
 
-    history = model.fit(x['train'], y['train'], epochs=N_epochs, batch_size=batch_size,
-                     steps_per_epoch=steps_per_epoch, validation_data=(x['val'], y['val']),
+    history = model.fit(x['training'], y['training'], epochs=N_epochs, batch_size=batch_size,
+                     steps_per_epoch=steps_per_epoch, validation_data=(x['validation'], y['validation']),
                      verbose=verbose, callbacks=[cp_callback])
     if full_output:
         return history, steps_per_epoch, path
@@ -137,30 +118,14 @@ if __name__ == '__main__':
     print('Seed: {}'.format(seed))
 
     ### load the data
-    x = {}
-    y = {}
     data_folder = 'pan/npz_files/'
-    sys.stdout.write('Loading data... ')
-    sys.stdout.flush()
-    for H in range(2,11):
-        for i,cond in enumerate(('training', 'test', 'validation')):
-            time, omega, inertia = load_one_block(data_folder + \
-                                                  'ieee14_{}_set_H_{:.3f}.npz'.\
-                                                  format(cond, H+i/3), \
-                                                  'omega_coi', 60)
-            key = cond[:5-i]
-            try:
-                x[key] = tf.concat([x[key], omega], axis=0)
-                y[key] = tf.concat([y[key], inertia], axis=0)
-            except:
-                x[key] = omega
-                y[key] = inertia
-    sys.stdout.write('done.\n')
-    N = x['train'].shape[1]
+    inertia = {key: np.arange(2,11) + i/3 for i,key in enumerate(('training', 'test', 'validation'))}
+    time, x, y = load_data(data_folder, inertia)
+    N = x['training'].shape[1]
 
     ### normalize the data
-    x_train_mean = np.mean(x['train'])
-    x_train_std = np.std(x['train'])
+    x_train_mean = np.mean(x['training'])
+    x_train_std = np.std(x['training'])
     for key in x:
         x[key] = (x[key] - x_train_mean) / x_train_std
 
@@ -169,17 +134,17 @@ if __name__ == '__main__':
         dropout_coeff = 0.2
     else:
         dropout_coeff = None
-    depth_level = 1
+    depth_level = 2
     learning_rate = 1e-4
     loss_function =  'MAE'
     model, N_units, kernel_size, optimizer, loss = build_network(depth_level, learning_rate, dropout_coeff, loss_function, full_output=True)
     model.summary()
 
     ### train the network
-    N_epochs   = 3000
+    N_epochs   = 1000
     batch_size = 128
     history, steps_per_epoch, output_path = train_network(model, x, y, N_epochs, batch_size, \
-                                                          output_dir='inertia', full_output=True)
+                                                          output_dir='trained_networks', full_output=True)
     checkpoint_path = output_path + '/checkpoints'
     
     ### find the best model based on the validation loss
@@ -200,7 +165,8 @@ if __name__ == '__main__':
                   'depth_level': depth_level, 'N_units': N_units, 'kernel_size': kernel_size,
                   'N_epochs': N_epochs, 'batch_size': batch_size, 'steps_per_epoch': steps_per_epoch,
                   'mape_cnn': mape_cnn, 'learning_rate': learning_rate, 'y_test': y['test'],
-                  'y_cnn': y_cnn, 'loss_function': loss_function}
+                  'y_cnn': y_cnn, 'loss_function': loss_function, 'x_train_mean': x_train_mean,
+                  'x_train_std': x_train_std}
 
     best_model.save(output_path)
     pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
@@ -215,7 +181,7 @@ if __name__ == '__main__':
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Loss')
     ### plot the results obtained with the CNN
-    limits = np.squeeze(y['train'].numpy()[[0,-1]])
+    limits = np.squeeze(y['training'].numpy()[[0,-1]])
     limits[1] += 1
     ax2.plot(limits, limits, 'g--')
     ax2.plot(y['test'], y_cnn, 'o', color=[1,.7,1], markersize=4, \
