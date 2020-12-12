@@ -112,8 +112,8 @@ if __name__ == '__main__':
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='configuration file')
     parser.add_argument('-d', '--data-dir', default=None, type=str, help='directory where training data is stored')
+    parser.add_argument('-v', '--var-name',  default=None,  type=str, help='name of the variable to use for the training')
     parser.add_argument('-o', '--output-dir',  default='experiments',  type=str, help='output directory')
-    parser.add_argument('-v', '--var-name',  default='omega_coi',  type=str, help='name of the variable to use for the training')
     parser.add_argument('--no-comet', action='store_true', help='do not use CometML to log the experiment')
     args = parser.parse_args(args=sys.argv[1:])
 
