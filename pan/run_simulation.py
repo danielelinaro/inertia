@@ -23,7 +23,7 @@ if __name__ == '__main__':
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
     parser.add_argument('pan_file', type=str, action='store', nargs='?', default='ieee14.pan', help='PAN netlist')
-    parser.add_argument('-H', '--inertia',  type=float, required=True, help='inertia values in the form "Hmin:Hmax:Hstep"')
+    parser.add_argument('-H', '--inertia',  type=float, required=True, help='inertia value')
     parser.add_argument('-d', '--dur', default=300, type=float, help='simulation duration in seconds')
     parser.add_argument('--alpha',  default=0.5,  type=float, help='alpha parameter of the OU process')
     parser.add_argument('--mu',  default=0.0,  type=float, help='mu parameter of the OU process')
@@ -67,8 +67,9 @@ if __name__ == '__main__':
     # value of inertia
     H = args.inertia
 
-    mem_vars = ['time:noise', 'omegacoi:noise']
-    disk_vars = ['omegacoi']
+    mem_vars = ['time:noise', 'omega01:noise', 'omega02:noise', 'G3:omega:noise', \
+                'G6:omega:noise', 'G8:omega:noise', 'omegacoi:noise']
+    disk_vars = ['omega*']
 
     ok,libs = pan.load_netlist(args.pan_file)
     if not ok:
@@ -88,11 +89,13 @@ if __name__ == '__main__':
 
     data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=2, maxord=2, \
                     noisefmax=frand/2, noiseinj=2, seed=pan_seed, \
-                    iabstol=1e-6, devvars=1, tmax=0.1, annotate=3, \
+                    iabstol=1e-6, devvars=0, tmax=0.1, annotate=3, \
                     savelist='["' + '","'.join(disk_vars) + '"]')
 
     parameters = {'H': H, 'alpha': alpha, 'mu': mu, 'c': c, 'frand': frand, \
                   'rng_seed': rng_seed, 'pan_seed': pan_seed}
 
-    np.savez_compressed(args.output, time=data[0], omega_coi=data[1], parameters=parameters)
+    kwargs = {':'.join(var.split(':')[:-1]): data[i] for i,var in enumerate(mem_vars)}
+    kwargs['parameters'] = parameters
+    np.savez_compressed(args.output, **kwargs)
 

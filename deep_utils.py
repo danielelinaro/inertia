@@ -26,7 +26,7 @@ def load_one_block(filename, varname, trial_dur = 60, verbose = False):
                        shape=(n_trials,1), dtype=tf.float32)
 
 
-def load_data(folder, inertia):
+def load_data(folder, inertia, var_name='omega_coi'):
     if folder[-1] != '/':
         folder += '/'
     x = {}
@@ -35,7 +35,7 @@ def load_data(folder, inertia):
         for h in H:
             time, omega, inertia = load_one_block(folder + \
                                                   'ieee14_{}_set_H_{:.3f}.npz'.format(key, h), \
-                                                  'omega_coi', 60)
+                                                  var_name, 60)
             try:
                 x[key] = tf.concat([x[key], omega], axis=0)
                 y[key] = tf.concat([y[key], inertia], axis=0)

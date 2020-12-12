@@ -1,6 +1,5 @@
-parameters TSTOP=300 VDIG=1 LAMBDA=0 FRAND=10 F0=60 H_COEFF=1 
-parameters D=0 DZA=36m/F0
-parameters PRAND=1M MAXDCGAIN=1M
+parameters TSTOP=7200 VDIG=1 LAMBDA=0 FRAND=10 D=0 F0=60 H_COEFF=1 
+parameters PRAND=1M
 
 ; Synthetic inertia
 parameters k0=100 t_stop_iniz=3 t_stop_fin=20 i0_limit=1e5 serie=39 \
@@ -8,12 +7,69 @@ parameters k0=100 t_stop_iniz=3 t_stop_fin=20 i0_limit=1e5 serie=39 \
     kp_DC_1=600*0 ki_DC_1=1*46875 Kd=33892 ic_limit=2e3 deltavc_limit=vc_ref*0.4 \
     Ta_wu=1e-6 CDC=3528/5 MATF="simSyn1.mat"
 
+parameter MAXDCGAIN=1M
+
+#ifndef SYNT
+    parameters SaveSet = ["agc02","drift14","omega*","pm","bus13"]
+#endif
+
+#ifdef DZ
+    ; increase by 10 fold
+    parameter DZA=36m/F0
+#else
+    parameter DZA=0.36/F0
+#endif
+
 options outintnodes=yes topcheck=2
 
 Al_dummy_tstop alter param="TSTOP" rt=yes
 Al_dummy_frand alter param="FRAND" rt=yes
-Al_dummy_d     alter param="D"     rt=yes
-Al_dummy_dza   alter param="DZA"   rt=yes
+
+Step control begin
+
+    alpha = 0.5;     %relaxation time  tau = 1/alpha
+    mu    = 0;       %mean of stochatic process x
+    c     = 0.5;     %diffusion constant  --> b   = c^2
+    dt    = 1/FRAND;
+
+    seed(12345);
+
+    T = dt:dt:TSTOP+dt;
+
+    x = zeros(length(T)); % Allocate output vector, set initial condition
+    x(1) = 0; %set initial condition
+
+    for i = 1:length(T)-1
+	    x(i+1) = (x(i) + alpha * mu * dt + c * sqrt(dt) * randn()) / (1 + alpha * dt);
+    end
+
+    noise_samples = [T, x];
+
+    idx = 1;
+    nsteps = 101;
+    H_min = 3.5;
+    H_max = 6.5;
+    if (nsteps == 1)
+        Time = [3600];
+        H = [H_max];
+    else
+        Time = linspace(3550, 3650, nsteps);
+        H    = linspace(H_min, H_max, nsteps);
+    end
+    max_idx = length(Time);
+    
+    Tr tran tstop=TSTOP nettype=1 method=2 maxord=2 noisefmax=FRAND/2 noiseinj=2 \
+                  seed=5061983 iabstol=1u tmax=0.1 annotate=4 devvars=no \
+                  savelist=["omega*"] begin
+    
+        if( idx <= max_idx && time > Time( idx ) )
+            AlterM alter instance="G1" param="m" value=2*H(idx) invalidate=false
+            idx = idx + 1;
+        end
+    
+    end
+
+endcontrol
 
 begin power
 
@@ -87,7 +143,7 @@ G1   bus01  avr01  pm01  omega01  powergenerator slack=yes \
 	       type=52   \
 		 xl=0.2396     ra=0         xd=0.8979    xdp=0.2998  xds=0.23 \
 	       td0p=7.4      td0s=0.03      xq=0.646     xqp=0.646   xqs=0.4  \
-	       tq0p=0        tq0s=0.033     m=H_COEFF*10.296           d=D 
+	       tq0p=0        tq0s=0.033     m=7           d=D 
                ; m=H_COEFF_G1*10.296  h = m/2 h = [2,10]
 
 ; Second synchronous machine - voltage regualator - turbine governor
