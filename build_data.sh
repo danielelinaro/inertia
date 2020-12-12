@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]] ; do
 done
 
 output_dir="IEEE14_D=${D}_DZA=${DZA}"
-config_template="template.json"
+config_template="config/build_data_config_template.json"
 training_config="training_config.json"
 test_config="test_config.json"
 validation_config="validation_config.json"
