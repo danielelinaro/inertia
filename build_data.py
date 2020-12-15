@@ -150,7 +150,7 @@ if __name__ == '__main__':
         seeds = random_seeds[i,:]
         inertia = H[i]
 
-        out_file = '{}/{}{}_H_{:.3f}'.format(output_dir, os.path.splitext(pan_file)[0], suffix, H[i])
+        out_file = '{}/{}{}_H_{:.3f}'.format(output_dir, os.path.splitext(os.path.basename(pan_file))[0], suffix, H[i])
 
         np.savez_compressed(out_file, time=time, omega_G1=omega_G1, omega_G2=omega_G2, \
                             omega_G3=omega_G3, omega_G6=omega_G6, omega_G8=omega_G8, \

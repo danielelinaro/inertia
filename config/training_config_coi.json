@@ -5,6 +5,6 @@
     "depth_level": 1,
     "learning_rate": 1e-4,
     "loss_function": "MAE",
-    "N_epochs": 3000,
+    "N_epochs": 2000,
     "batch_size": 128
 }

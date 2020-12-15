@@ -29,6 +29,9 @@ if __name__ == '__main__':
     parser.add_argument('--mu',  default=0.0,  type=float, help='mu parameter of the OU process')
     parser.add_argument('-c',  default=0.5,  type=float, help='c parameter of the OU process')
     parser.add_argument('--frand',  default=10,  type=float, help='sampling rate of the random signal')
+    parser.add_argument('-D', '--damping', default=0, type=int, help='damping coefficient')
+    parser.add_argument('--DZA', default=0.036, type=float, help='deadband amplitude')
+    parser.add_argument('-F', '--frequency', default=60, type=float, help='baseline frequency of the system')
     parser.add_argument('-o', '--output',  default='ieee14.npz',  type=str, help='output file name')
     parser.add_argument('-s', '--seed',  default=None, type=int, help='seed of the random number generator')
     parser.add_argument('-f', '--force', action='store_true', help='force overwrite of output file')
@@ -76,9 +79,13 @@ if __name__ == '__main__':
         print('Cannot load netlist from file {}.'.format(args.pan_file))
         sys.exit(4)
 
+    D = args.damping
+    DZA = args.DZA / args.frequency
     pan.alter('Altstop', 'TSTOP', tstop, annotate=1)
     pan.alter('Alfrand', 'FRAND', frand, annotate=1)
-    pan.alter('Alinertia', 'm', 2 * H, instance='G1', annotate=1)
+    pan.alter('Ald',     'D',     D,     annotate=1)
+    pan.alter('Aldza',   'DZA',   DZA,   annotate=1)
+    pan.alter('Alh',     'm',     2 * H, instance='G1', annotate=1)
 
     np.random.seed(rng_seed)
     pan_seed = np.random.randint(low=0, high=1000000)
