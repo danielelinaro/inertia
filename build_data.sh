@@ -64,7 +64,7 @@ Hmax=`echo $Hmax+0.333333 | bc`
 sed -e 's/{HMIN}/'$Hmin'/' -e 's/{HMAX}/'$Hmax'/' -e 's/{D}/'$D'/' \
     -e 's/{DZA}/'$DZA'/' -e 's/{N}/100/' ${config_template} > ${validation_config}
 
-#python3 build_data.py -s training_set -o ${output_dir} ${training_config} > training_data.log
+python3 build_data.py -s training_set -o ${output_dir} ${training_config} > training_data.log
 python3 build_data.py -s test_set -o ${output_dir} ${test_config} > test_data.log
 python3 build_data.py -s validation_set -o ${output_dir} ${validation_config} > validation_data.log
 

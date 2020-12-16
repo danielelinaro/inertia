@@ -11,13 +11,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 from comet_ml import Experiment
 import tensorflow as tf
+import tensorflow_addons as tfa
 from deep_utils import *
 
+import colorama as cm
+print_error   = lambda msg: print(f'{cm.Fore.RED}'    + msg + f'{cm.Style.RESET_ALL}')
+print_warning = lambda msg: print(f'{cm.Fore.YELLOW}' + msg + f'{cm.Style.RESET_ALL}')
+print_msg     = lambda msg: print(f'{cm.Fore.GREEN}'  + msg + f'{cm.Style.RESET_ALL}')
 
 
-def build_network(N_samples, depth_level = 1, learning_rate = 1e-4, dropout_coeff = None, loss_function = 'mae', optimizer = 'adam', full_output = False):
+
+def build_model(N_samples, depth_level = 1, learning_rate = 1e-4, dropout_coeff = None,
+                loss_function = 'mae', optimizer = 'adam', full_output = False):
     """
-    Builds the network
+    Builds and compiles the model
     
     The network topology used here is taken from the following paper:
    
@@ -31,14 +38,12 @@ def build_network(N_samples, depth_level = 1, learning_rate = 1e-4, dropout_coef
     elif loss_function.lower() == 'mape':
         loss = tf.keras.losses.MeanAbsolutePercentageError()
     else:
-        print('Unknown loss function: {}.'.format(loss_function))
-        return None
+        raise Exception('Unknown loss function: {}.'.format(loss_function))
 
     if optimizer.lower() == 'adam':
         optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     else:
-        print('Unknown optimizer: {}.'.format(optimizer))
-        return None    
+        raise Exception('Unknown optimizer: {}.'.format(optimizer))
 
     N_units = {}
 
@@ -78,29 +83,79 @@ def build_network(N_samples, depth_level = 1, learning_rate = 1e-4, dropout_coef
     return model
 
 
-def train_network(model, x, y, N_epochs, batch_size, output_dir, steps_per_epoch = None, verbose = 1, full_output = False):
+
+def train_model(model, x, y, N_epochs, batch_size, output_dir,
+                steps_per_epoch = None, verbose = 1, full_output = False, **kwargs):
+
     checkpoint_dir = output_dir + '/checkpoints'
     os.makedirs(checkpoint_dir)
 
     # create a callback that saves the model's weights
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_dir + \
-                                                     '/weights.{epoch:02d}-{val_loss:.2f}.h5',
-                                                     save_weights_only=False,
-                                                     save_best_only=True,
-                                                     monitor='val_loss',
-                                                     verbose=0)
+    checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(filepath = checkpoint_dir + \
+                                                       '/weights.{epoch:02d}-{val_loss:.2f}.h5',
+                                                       save_weights_only = False,
+                                                       save_best_only = True,
+                                                       monitor = 'val_loss',
+                                                       verbose = verbose)
+    cbs = [checkpoint_cb]
+
+    try:
+        # create a callback that will stop the optimization if there is no improvement
+        early_stop_cb = tf.keras.callbacks.EarlyStopping(monitor = 'val_loss',
+                                                         patience = kwargs['early_stopping_patience'],
+                                                         verbose = verbose,
+                                                         mode = 'min')
+
+        cbs.append(early_stop_cb)
+        print_msg('Added a callback for early stopping.')
+    except:
+        print_warning('Not adding a callback for early stopping.')
+
+    try:
+        # According to [1], "experiments show that it often is good to set stepsize equal to
+        # 2 − 10 times the number of iterations in an epoch".
+        #
+        # [1] Smith, L.N., 2017, March.
+        #     Cyclical learning rates for training neural networks.
+        #     In 2017 IEEE Winter Conference on Applications of Computer Vision (WACV) (pp. 464-472). IEEE.
+        #
+        schedule = tfa.optimizers.Triangular2CyclicalLearningRate(
+            initial_learning_rate = kwargs['initial_learning_rate'],
+            maximal_learning_rate = kwargs['max_learning_rate'],
+            step_size = x['training'].shape[0] // batch_size * kwargs['clr_factor'])
+        lr_scheduler_cb = tf.keras.callbacks.LearningRateScheduler(schedule, verbose)
+        cbs.append(lr_scheduler_cb)
+        print_msg('Added a callback for cyclical learning rate scheduling.')
+    except:
+        print_warning('Not adding a callback for cyclical learning rate scheduling.')
+
+    try:
+        optimizer_lr = model.optimizer.learning_rate.numpy()
+        reduce_lr_cb = tf.keras.callbacks.ReduceLROnPlateau(monitor = 'val_loss',
+                                                            factor = kwargs['lr_reduction_factor'],
+                                                            patience = kwargs['lr_reduction_patience'],
+                                                            verbose = verbose,
+                                                            mode = 'min',
+                                                            cooldown = kwargs['lr_reduction_patience'] / 10,
+                                                            min_lr = optimizer_lr / 1000)
+        cbs.append(reduce_lr_cb)
+        print_msg('Added a callback for reducing learning rate on plateaus.')
+    except:
+        print_warning('Not adding a callback for reducing learning rate on plateaus.')
 
     if steps_per_epoch is None:
         N_batches = np.ceil(x['training'].shape[0] / batch_size)
         steps_per_epoch = np.max([N_batches, 100])
 
     history = model.fit(x['training'], y['training'], epochs=N_epochs, batch_size=batch_size,
-                     steps_per_epoch=steps_per_epoch, validation_data=(x['validation'], y['validation']),
-                     verbose=verbose, callbacks=[cp_callback])
+                        steps_per_epoch=steps_per_epoch, validation_data=(x['validation'], y['validation']),
+                        verbose=verbose, callbacks=cbs)
+
     if full_output:
         return history, steps_per_epoch
 
     return history
+
 
 
 if __name__ == '__main__':
@@ -119,14 +174,14 @@ if __name__ == '__main__':
 
     config_file = args.config_file
     if not os.path.isfile(config_file):
-        print('{}: {}: no such file.'.format(progname, config_file))
+        print_error('{}: {}: no such file.'.format(progname, config_file))
         sys.exit(1)
     config = json.load(open(config_file, 'r'))
-    
+
     with open('/dev/random', 'rb') as fid:
         seed = int.from_bytes(fid.read(4), 'little')
     tf.random.set_seed(seed)
-    print('Seed: {}'.format(seed))
+    print_msg('Seed: {}'.format(seed))
 
     log_to_comet = not args.no_comet
 
@@ -147,7 +202,7 @@ if __name__ == '__main__':
     else:
         data_folder = config['data_dir']
     if not os.path.isdir(data_folder):
-        print('{}: {}: no such directory.'.format(progname, data_folder))
+        print_error('{}: {}: no such directory.'.format(progname, data_folder))
         sys.exit(1)
 
     inertia = {}
@@ -159,7 +214,7 @@ if __name__ == '__main__':
     else:
         var_name = config['var_name']
     time, x, y = load_data(data_folder, inertia, var_name)
-    N_samples = x['training'].shape[1]
+    N_training_traces, N_samples = x['training'].shape
 
     ### normalize the data
     x_train_mean = np.mean(x['training'])
@@ -177,18 +232,25 @@ if __name__ == '__main__':
     depth_level = config['depth_level']
     learning_rate = config['learning_rate']
     loss_function =  config['loss_function']
-    model, N_units, kernel_size, optimizer, loss = build_network(N_samples, depth_level, learning_rate, dropout_coeff, loss_function, full_output=True)
+    batch_size = config['batch_size']
+
+    model, N_units, kernel_size, optimizer, loss = build_model(N_samples,
+                                                               depth_level,
+                                                               learning_rate,
+                                                               dropout_coeff,
+                                                               loss_function,
+                                                               config['optimizer'],
+                                                               full_output=True)
     model.summary()
 
     ### train the network
     N_epochs   = config['N_epochs']
-    batch_size = config['batch_size']
-
     parameters = config.copy()
     parameters['seed'] = seed
     parameters['data_dir'] = data_folder
     parameters['var_name'] = var_name
     parameters['dropout_coeff'] = dropout_coeff
+    parameters['N_training_traces'] = N_training_traces
     parameters['N_samples'] = N_samples
     parameters['N_units'] = N_units
     parameters['kernel_size'] = kernel_size
@@ -199,15 +261,34 @@ if __name__ == '__main__':
         experiment.log_parameters(parameters)
 
     output_path = args.output_dir + '/' + experiment_key
-    history, steps_per_epoch = train_network(model, x, y, N_epochs, batch_size, \
-                                             output_dir = output_path, \
-                                             full_output = True)
+
+    kwargs = {}
+
+    if 'es_patience' in config:
+        kwargs['early_stopping_patience'] = config['es_patience']
+
+    if 'clr_factor' in config:
+        kwargs['clr_factor'] = config['clr_factor']
+        kwargs['initial_learning_rate'] = config['learning_rate'] * 1e-2
+        kwargs['max_learning_rate'] = config['learning_rate'] * 1e2
+        for key in ('initial_learning_rate', 'max_learning_rate'):
+            try:
+                kwargs[key] = config[key]
+            except:
+                pass
+
+    if 'lrr_patience' in config and 'lrr_factor' in config:
+        if 'clr_factor' in config:
+            print_warning('Both clr_factor and (lrr_patience,lrr_factor) are present in the configuration file: will use a cyclical learning rate.')
+        else:
+            kwargs['lr_reduction_patiench'] = config['lrr_patience']
+            kwargs['lr_reduction_factor']   = config['lrr_factor']
+
+    history, steps_per_epoch = train_model(model, x, y, N_epochs, batch_size,
+                                           output_dir = output_path,
+                                           full_output = True, **kwargs)
 
     parameters['steps_per_epoch'] = steps_per_epoch
-
-    if log_to_comet:
-        experiment.log_parameter('steps_per_epoch', steps_per_epoch)
-        experiment.set_step(0)
 
     checkpoint_path = output_path + '/checkpoints'
     
@@ -223,16 +304,18 @@ if __name__ == '__main__':
     ### compute the mean absolute percentage error on the CNN prediction
     y_test = np.squeeze(y['test'].numpy())
     mape_prediction = tf.keras.losses.mean_absolute_percentage_error(y_test, y_prediction).numpy()
-    print('MAPE on CNN prediction ... {:.2f}%'.format(mape_prediction))
+    print_msg('MAPE on CNN prediction ... {:.2f}%'.format(mape_prediction))
     test_results = {'y_test': y_test, 'y_prediction': y_prediction, 'mape_prediction': mape_prediction}
     
-    if log_to_comet:
-        experiment.log_metric('mape_prediction', mape_prediction)
-
     best_model.save(output_path)
     pickle.dump(test_results, open(output_path + '/test_results.pkl', 'wb'))
     pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
     pickle.dump(history.history, open(output_path + '/history.pkl', 'wb'))
+
+    if log_to_comet:
+        experiment.log_parameter('steps_per_epoch', steps_per_epoch)
+        experiment.log_metric('mape_prediction', mape_prediction)
+        experiment.log_model('best_model', output_path + '/saved_model.pb')
 
     fig,(ax1,ax2) = plt.subplots(1, 2, figsize=(10,4))
     ### plot the loss as a function of the epoch number
