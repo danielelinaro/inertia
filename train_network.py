@@ -263,8 +263,6 @@ if __name__ == '__main__':
     output_path = args.output_dir + '/' + experiment_key
     parameters['output_path'] = output_path
 
-    pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
-
     if log_to_comet:
         experiment.log_parameters(parameters)
 
@@ -295,6 +293,7 @@ if __name__ == '__main__':
     test_results = {'y_test': y_test, 'y_prediction': y_prediction, 'mape_prediction': mape_prediction}
     
     best_model.save(output_path)
+    pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
     pickle.dump(test_results, open(output_path + '/test_results.pkl', 'wb'))
     pickle.dump(history.history, open(output_path + '/history.pkl', 'wb'))
 
