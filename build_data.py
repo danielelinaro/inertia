@@ -86,17 +86,15 @@ if __name__ == '__main__':
     pan.alter('Ald',     'D',     D,     annotate=1)
     pan.alter('Aldza',   'DZA',   DZA,   annotate=1)
 
-    omega_G1  = np.zeros((N_trials, N_samples - 1))
-    omega_G2  = np.zeros((N_trials, N_samples - 1))
-    omega_G3  = np.zeros((N_trials, N_samples - 1))
-    omega_G6  = np.zeros((N_trials, N_samples - 1))
-    omega_G8  = np.zeros((N_trials, N_samples - 1))
-    omega_coi = np.zeros((N_trials, N_samples - 1))
+    omega = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in (1,2,3,6,8)}
+    omega['coi'] = np.zeros((N_trials, N_samples - 1))
+    omegael = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in (1,2,3,6,8)}
     noise     = np.zeros((N_trials, N_samples))
 
-    mem_vars = ['time:noise', 'omega01:noise', 'omega02:noise', \
-                'G3:omega:noise', 'G6:omega:noise', \
-                'G8:omega:noise', 'omegacoi:noise']
+    mem_vars = ['time:noise', 'omega01:noise', 'omega02:noise', 'G3:omega:noise', \
+                'G6:omega:noise', 'G8:omega:noise', 'omegacoi:noise', \
+                'omegael01:noise', 'omegael02:noise', 'omegael03:noise', \
+                'omegael06:noise', 'omegael08:noise']
     disk_vars = ['omega*']
 
     if args.output_dir is None:
@@ -114,10 +112,11 @@ if __name__ == '__main__':
         json.dump(config, open(output_dir + '/' + config_file, 'w'), indent=4)
 
     suffix = args.suffix
-    if suffix[0] != '_':
-        suffix = '_' + suffix
-    if suffix[-1] == '_':
-        suffix = suffix[:-1]
+    if suffix != '':
+        if suffix[0] != '_':
+            suffix = '_' + suffix
+        if suffix[-1] == '_':
+            suffix = suffix[:-1]
 
     for i in range(N_H):
 
@@ -139,12 +138,25 @@ if __name__ == '__main__':
                             iabstol=1e-6, devvars=0, tmax=0.1, annotate=1, \
                             savelist='["' + '","'.join(disk_vars) + '"]')
 
-            omega_G1[j,:]  = data[1,:]
-            omega_G2[j,:]  = data[2,:]
-            omega_G3[j,:]  = data[3,:]
-            omega_G6[j,:]  = data[4,:]
-            omega_G8[j,:]  = data[5,:]
-            omega_coi[j,:] = data[6,:]
+            for k in (1,2):
+                var_name = 'omega{:02d}:noise'.format(k)
+                idx = mem_vars.index(var_name)
+                omega['G{}'.format(k)][j,:] = data[idx,:]
+
+            for k in (3,6,8):
+                var_name = 'G{}:omega:noise'.format(k)
+                idx = mem_vars.index(var_name)
+                omega['G{}'.format(k)][j,:] = data[idx,:]
+
+            idx = mem_vars.index('omegacoi:noise')
+            omega['coi'][j,:] = data[idx,:]
+
+            for k in (1,2,3,6,8):
+                var_name = 'omegael{:02d}:noise'.format(k)
+                idx = mem_vars.index(var_name)
+                # the electrical omega in PAN has zero mean, so it needs to
+                # be shifted at 1 p.u.
+                omegael['G{}'.format(k)][j,:] = data[idx,:] + 1.0
 
         time = data[0,:]
         seeds = random_seeds[i,:]
@@ -152,8 +164,19 @@ if __name__ == '__main__':
 
         out_file = '{}/{}{}_H_{:.3f}'.format(output_dir, os.path.splitext(os.path.basename(pan_file))[0], suffix, H[i])
 
-        np.savez_compressed(out_file, time=time, omega_G1=omega_G1, omega_G2=omega_G2, \
-                            omega_G3=omega_G3, omega_G6=omega_G6, omega_G8=omega_G8, \
-                            omega_coi=omega_coi, seeds=seeds, inertia=inertia, noise=noise, \
-                            hw_seed=hw_seed, alpha=alpha, mu=mu, c=c)
+        kwargs = {'time': time}
+        for i in (1,2,3,6,8):
+            kwargs['omega_G{}'.format(i)] = omega['G{}'.format(i)]
+        kwargs['omega_coi'] = omega['coi']
+        for i in (1,2,3,6,8):
+            kwargs['omegael_G{}'.format(i)] = omegael['G{}'.format(i)]
+        kwargs['seeds'] = seeds
+        kwargs['inertia'] = inertia
+        kwargs['noise'] = noise
+        kwargs['hw_seed'] = hw_seed
+        kwargs['alpha'] = alpha
+        kwargs['mu'] = mu
+        kwargs['c'] = c
+
+        np.savez_compressed(out_file, **kwargs)
 

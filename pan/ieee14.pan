@@ -90,6 +90,8 @@ G1   bus01  avr01  pm01  omega01  powergenerator slack=yes \
 	       tq0p=0        tq0s=0.033     m=H_COEFF*10.296           d=D 
                ; m=H_COEFF_G1*10.296  h = m/2 h = [2,10]
 
+Ec1 bus01 omegael01 gnd powerec type=2
+
 ; Second synchronous machine - voltage regualator - turbine governor
 Tg2      pm02  omega02 agc02 powertg type=1 omegaref=1 r=0.02 pmax=4 pmin=0.3 \
                                ts=0.1 tc=0.45 t3=0 t4=12 t5=50 gen="G2" \
@@ -107,6 +109,8 @@ G2   bus02  avr02   pm02  omega02  powergenerator \
 	       td0p=6.1      td0s=0.04     xq=0.98       xqp=0.36   xqs=0.13 \
 	       tq0p=0.3      tq0s=0.099     m=H_COEFF*13.08        d=D
 
+Ec2 bus02 omegael02 gnd powerec type=2
+
 E3  bus03  avr03 poweravr vrating=69k type=2 vmax=4.38 vmin=0 ka=20 ta=0.02 \
                           kf=0.001 tf=1 ke=1 te=1.98 tr=0.001 ae=0.0006 be=0.9
 G3  bus03  avr03 powergenerator \
@@ -117,6 +121,8 @@ G3  bus03  avr03 powergenerator \
 		 xl=0          ra=0.0031   xd=1.05       xdp=0.185   xds=0.13 \
                td0p=6.1      td0s=0.04     xq=0.98       xqp=0.36    xqs=0.13 \
 	       tq0p=0.3     tq0s=0.099      m=H_COEFF*13.08        d=D
+
+Ec3 bus03 omegael03 gnd powerec type=2
 
 E6  bus06  avr06 poweravr vrating=13.8k type=2 vmax=6.81 vmin=1.395 ka=20 \
                  ta=0.02 kf=0.001 tf=1 ke=1 te=0.7  tr=0.001 ae=0.0006 be=0.9
@@ -129,6 +135,8 @@ G6  bus06  avr06 powergenerator \
 	       td0p=4.75     td0s=0.06     xq=1.22       xqp=0.715   xqs=0.12  \
 	       tq0p=1.5      tq0s=0.21      m=H_COEFF*10.12         d=D
 
+Ec6 bus06 omegael06 gnd powerec type=2
+
 E8  bus08  avr08 poweravr vrating=18k type=2 vmax=10 vmin=-1 ka=20 \
                  ta=0.02 kf=0.001 tf=1 ke=1 te=0.7  tr=0.001 ae=0.0006 be=0.9
 G8  bus08  avr08 powergenerator \
@@ -139,6 +147,8 @@ G8  bus08  avr08 powergenerator \
 	         xl=0.134      ra=0.0014   xd=1.25       xdp=0.232   xds=0.12  \
 	       td0p=4.75     td0s=0.06     xq=1.22       xqp=0.715   xqs=0.12  \
 	       tq0p=1.5      tq0s=0.21      m=H_COEFF*10.12        d=D
+
+Ec8 bus08 omegael08 gnd powerec type=2
 
 ; Center of inertia
 

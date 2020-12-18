@@ -71,7 +71,9 @@ if __name__ == '__main__':
     H = args.inertia
 
     mem_vars = ['time:noise', 'omega01:noise', 'omega02:noise', 'G3:omega:noise', \
-                'G6:omega:noise', 'G8:omega:noise', 'omegacoi:noise']
+                'G6:omega:noise', 'G8:omega:noise', 'omegacoi:noise', \
+                'omegael01:noise', 'omegael02:noise', 'omegael03:noise', \
+                'omegael06:noise', 'omegael08:noise']
     disk_vars = ['omega*']
 
     ok,libs = pan.load_netlist(args.pan_file)
@@ -99,10 +101,31 @@ if __name__ == '__main__':
                     iabstol=1e-6, devvars=0, tmax=0.1, annotate=3, \
                     savelist='["' + '","'.join(disk_vars) + '"]')
 
-    parameters = {'H': H, 'alpha': alpha, 'mu': mu, 'c': c, 'frand': frand, \
-                  'rng_seed': rng_seed, 'pan_seed': pan_seed}
+    kwargs = {}
+    idx = mem_vars.index('time:noise')
+    kwargs['time'] = data[idx,:]
+    idx = mem_vars.index('omegacoi:noise')
+    kwargs['omega_coi'] = data[idx,:]
 
-    kwargs = {':'.join(var.split(':')[:-1]): data[i] for i,var in enumerate(mem_vars)}
-    kwargs['parameters'] = parameters
+    for i in (1,2):
+        var_name = 'omega{:02d}:noise'.format(i)
+        idx = mem_vars.index(var_name)
+        kwargs['omega_G{}'.format(i)] = data[idx,:]
+
+    for i in (3,6,8):
+        var_name = 'G{}:omega:noise'.format(i)
+        idx = mem_vars.index(var_name)
+        kwargs['omega_G{}'.format(i)] = data[idx,:]
+
+    for i in (1,2,3,6,8):
+        var_name = 'omegael{:02d}:noise'.format(i)
+        idx = mem_vars.index(var_name)
+        # the electrical omega in PAN has zero mean, so it needs to
+        # be shifted at 1 p.u.
+        kwargs['omegael_G{}'.format(i)] = data[idx,:] + 1.0
+
+    kwargs['parameters'] = {'H': H, 'alpha': alpha, 'mu': mu, 'c': c, 'frand': frand, \
+                            'rng_seed': rng_seed, 'pan_seed': pan_seed}
+
     np.savez_compressed(args.output, **kwargs)
 
