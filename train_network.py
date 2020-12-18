@@ -21,8 +21,7 @@ print_msg     = lambda msg: print(f'{cm.Fore.GREEN}'  + msg + f'{cm.Style.RESET_
 
 
 
-def build_model(N_samples, depth_level = 1, learning_rate = 1e-4, dropout_coeff = None,
-                loss_function = 'mae', optimizer = 'adam', full_output = False):
+def build_model(N_samples, model_arch, loss_fun_pars, optimizer_pars):
     """
     Builds and compiles the model
     
@@ -33,27 +32,41 @@ def build_model(N_samples, depth_level = 1, learning_rate = 1e-4, dropout_coeff 
     Physical Review D, 97(4), 044039. http://doi.org/10.1103/PhysRevD.97.044039
     """
 
-    if loss_function.lower() == 'mae':
+    loss_fun_name = loss_fun_pars['name'].lower()
+    if loss_fun_name == 'mae':
         loss = tf.keras.losses.MeanAbsoluteError()
-    elif loss_function.lower() == 'mape':
+    elif loss_fun_name == 'mape':
         loss = tf.keras.losses.MeanAbsolutePercentageError()
     else:
         raise Exception('Unknown loss function: {}.'.format(loss_function))
 
-    if optimizer.lower() == 'adam':
-        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    learning_rate = optimizer_pars['learning_rate']
+    optimizer_name = optimizer_pars['name'].lower()
+    if optimizer_name == 'sgd':
+        momentum = optimizer_pars['momentum'] if 'momentum' in optimizer_pars else 0.
+        nesterov = optimizer_pars['nesterov'] if 'nesterov' in optimizer_pars else False
+        optimizer = tf.keras.optimizers.SGD(learning_rate, momentum, nesterov)
+    elif optimizer_name in ('adam', 'adamax', 'nadam'):
+        beta_1 = optimizer_pars['beta_1'] if 'beta_1' in optimizer_pars else 0.9
+        beta_2 = optimizer_pars['beta_2'] if 'beta_2' in optimizer_pars else 0.999
+        if optimizer_name == 'adam':
+            optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1, beta_2)
+        elif optimizer_name == 'adamax':
+            optimizer = tf.keras.optimizers.Adamax(learning_rate, beta_1, beta_2)
+        else:
+            optimizer = tf.keras.optimizers.Nadam(learning_rate, beta_1, beta_2)
+    elif optimizer_name == 'adagrad':
+        initial_accumulator_value = optimizer_pars['initial_accumulator_value'] if \
+                                    'initial_accumulator_value' in optimizer_pars else 0.1
+        optimizer = tf.keras.optimizers.Adagrad(learning_rate, initial_accumulator_value)
+    elif optimizer_name == 'adadelta':
+        rho = optimizer_pars['rho'] if 'rho' in optimizer_pars else 0.95
+        optimizer = tf.keras.optimizers.Adadelta(learning_rate, rho)
     else:
-        raise Exception('Unknown optimizer: {}.'.format(optimizer))
+        raise Exception('Unknown optimizer: {}.'.format(optimizer_name))
 
-    N_units = {}
-
-    if depth_level == 1:
-        N_units['conv'] = [16, 32, 64]
-    elif depth_level == 2:
-        N_units['conv'] = [64, 128, 256, 512]
-
-    N_units['pooling'] = [4 for _ in range(len(N_units['conv']))]
-    kernel_size = [5 for _ in range(len(N_units['conv']))]
+    N_units = model_arch['N_units']
+    kernel_size = model_arch['kernel_size']
 
     model = tf.keras.models.Sequential([
         tf.keras.layers.Reshape((N_samples,1), input_shape=(N_samples,)),
@@ -65,27 +78,28 @@ def build_model(N_samples, depth_level = 1, learning_rate = 1e-4, dropout_coeff 
         model.add(tf.keras.layers.ReLU())
     
     model.add(tf.keras.layers.Flatten())
-    if depth_level == 2:
-        model.add(tf.keras.layers.Dense(128, activation='relu'))
-    
-    model.add(tf.keras.layers.Dense(64, activation='relu'))
+    for n in N_units['dense']:
+        model.add(tf.keras.layers.Dense(n, activation='relu'))
 
-    if dropout_coeff is not None:
-        model.add(tf.keras.layers.Dropout(dropout_coeff))
+    if model_arch['dropout_coeff'] > 0:
+        model.add(tf.keras.layers.Dropout(model_arch['dropout_coeff']))
 
     model.add(tf.keras.layers.Dense(y['training'].shape[1]))
 
     model.compile(optimizer=optimizer, loss=loss)
 
-    if full_output:
-        return model, N_units, kernel_size, optimizer, loss
-
-    return model
+    return model, optimizer, loss
 
 
 
-def train_model(model, x, y, N_epochs, batch_size, output_dir,
-                steps_per_epoch = None, verbose = 1, full_output = False, **kwargs):
+def train_model(model, x, y,
+                N_epochs,
+                batch_size,
+                steps_per_epoch,
+                output_dir,
+                early_stopping_patience = None,
+                learning_rate_schedule = None,
+                verbose = 1):
 
     checkpoint_dir = output_dir + '/checkpoints'
     os.makedirs(checkpoint_dir)
@@ -99,62 +113,63 @@ def train_model(model, x, y, N_epochs, batch_size, output_dir,
                                                        verbose = verbose)
     cbs = [checkpoint_cb]
 
-    try:
+    if early_stopping_patience is not None:
         # create a callback that will stop the optimization if there is no improvement
         early_stop_cb = tf.keras.callbacks.EarlyStopping(monitor = 'val_loss',
-                                                         patience = kwargs['early_stopping_patience'],
+                                                         patience = early_stopping_patience,
                                                          verbose = verbose,
                                                          mode = 'min')
 
         cbs.append(early_stop_cb)
         print_msg('Added a callback for early stopping.')
-    except:
+    else:
         print_warning('Not adding a callback for early stopping.')
 
     try:
-        # According to [1], "experiments show that it often is good to set stepsize equal to
-        # 2 − 10 times the number of iterations in an epoch".
-        #
-        # [1] Smith, L.N., 2017, March.
-        #     Cyclical learning rates for training neural networks.
-        #     In 2017 IEEE Winter Conference on Applications of Computer Vision (WACV) (pp. 464-472). IEEE.
-        #
-        schedule = tfa.optimizers.Triangular2CyclicalLearningRate(
-            initial_learning_rate = kwargs['initial_learning_rate'],
-            maximal_learning_rate = kwargs['max_learning_rate'],
-            step_size = x['training'].shape[0] // batch_size * kwargs['clr_factor'])
-        lr_scheduler_cb = tf.keras.callbacks.LearningRateScheduler(schedule, verbose)
-        cbs.append(lr_scheduler_cb)
-        print_msg('Added a callback for cyclical learning rate scheduling.')
+
+        if learning_rate_schedule['name'] == 'cyclical':
+            # According to [1], "experiments show that it often is good to set stepsize equal to
+            # 2 − 10 times the number of iterations in an epoch".
+            #
+            # [1] Smith, L.N., 2017, March.
+            #     Cyclical learning rates for training neural networks.
+            #     In 2017 IEEE Winter Conference on Applications of Computer Vision (WACV) (pp. 464-472). IEEE.
+            #
+            schedule = tfa.optimizers.Triangular2CyclicalLearningRate(
+                initial_learning_rate = learning_rate_schedule['initial_learning_rate'],
+                maximal_learning_rate = learning_rate_schedule['max_learning_rate'],
+                step_size = x['training'].shape[0] // batch_size * learning_rate_schedule['factor'])
+            lr_scheduler_cb = tf.keras.callbacks.LearningRateScheduler(schedule, verbose)
+            cbs.append(lr_scheduler_cb)
+            print_msg('Added a callback for cyclical learning rate scheduling.')
+
+        elif learning_rate_schedule['name'] == 'reduce_on_plateau':
+            optimizer_lr = model.optimizer.learning_rate.numpy()
+            factor = learning_rate_schedule['factor']
+            patience = learning_rate_schedule['patience']
+            cooldown = learning_rate_schedule['cooldown'] if 'cooldown' \
+                       in learning_rate_schedule else patience / 10
+            min_lr = learning_rate_schedule['min_learning_rate'] if 'min_learning_rate' \
+                     in learning_rate_schedule else optimizer_lr / 1000
+            reduce_lr_cb = tf.keras.callbacks.ReduceLROnPlateau(monitor = 'val_loss',
+                                                                factor = factor,
+                                                                patience = patience,
+                                                                verbose = verbose,
+                                                                mode = 'min',
+                                                                cooldown = cooldown,
+                                                                min_lr = min_lr)
+            cbs.append(reduce_lr_cb)
+            print_msg('Added a callback for reducing learning rate on plateaus.')
+
+        else:
+            raise Exception('Unknown learning rate scheduling policy: {}'.format(learning_rate_schedule['name']))
+
     except:
-        print_warning('Not adding a callback for cyclical learning rate scheduling.')
+        print_warning('Not adding a callback for learning rate scheduling.')
 
-    try:
-        optimizer_lr = model.optimizer.learning_rate.numpy()
-        reduce_lr_cb = tf.keras.callbacks.ReduceLROnPlateau(monitor = 'val_loss',
-                                                            factor = kwargs['lr_reduction_factor'],
-                                                            patience = kwargs['lr_reduction_patience'],
-                                                            verbose = verbose,
-                                                            mode = 'min',
-                                                            cooldown = kwargs['lr_reduction_patience'] / 10,
-                                                            min_lr = optimizer_lr / 1000)
-        cbs.append(reduce_lr_cb)
-        print_msg('Added a callback for reducing learning rate on plateaus.')
-    except:
-        print_warning('Not adding a callback for reducing learning rate on plateaus.')
-
-    if steps_per_epoch is None:
-        N_batches = np.ceil(x['training'].shape[0] / batch_size)
-        steps_per_epoch = np.max([N_batches, 100])
-
-    history = model.fit(x['training'], y['training'], epochs=N_epochs, batch_size=batch_size,
-                        steps_per_epoch=steps_per_epoch, validation_data=(x['validation'], y['validation']),
-                        verbose=verbose, callbacks=cbs)
-
-    if full_output:
-        return history, steps_per_epoch
-
-    return history
+    return model.fit(x['training'], y['training'], epochs=N_epochs, batch_size=batch_size,
+                     steps_per_epoch=steps_per_epoch, validation_data=(x['validation'], y['validation']),
+                     verbose=verbose, callbacks=cbs)
 
 
 
@@ -166,8 +181,6 @@ if __name__ == '__main__':
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='configuration file')
-    parser.add_argument('-d', '--data-dir', default=None, type=str, help='directory where training data is stored')
-    parser.add_argument('-v', '--var-name',  default=None,  type=str, help='name of the variable to use for the training')
     parser.add_argument('-o', '--output-dir',  default='experiments',  type=str, help='output directory')
     parser.add_argument('--no-comet', action='store_true', help='do not use CometML to log the experiment')
     args = parser.parse_args(args=sys.argv[1:])
@@ -197,10 +210,7 @@ if __name__ == '__main__':
         experiment_key = strftime('%Y%m%d-%H%M%S', localtime())
 
     ### load the data
-    if args.data_dir is not None:
-        data_folder = args.data_dir
-    else:
-        data_folder = config['data_dir']
+    data_folder = config['data_dir']
     if not os.path.isdir(data_folder):
         print_error('{}: {}: no such directory.'.format(progname, data_folder))
         sys.exit(1)
@@ -209,11 +219,7 @@ if __name__ == '__main__':
     for key in ('training', 'test', 'validation'):
         inertia[key] = np.sort([float(re.findall('[0-9]+\.[0-9]*', f)[-1]) for f in glob.glob(data_folder + '/*' + key + '*.npz')])
 
-    if args.var_name is not None:
-        var_name = args.var_name
-    else:
-        var_name = config['var_name']
-    time, x, y = load_data(data_folder, inertia, var_name)
+    time, x, y = load_data(data_folder, inertia, config['var_name'])
     N_training_traces, N_samples = x['training'].shape
 
     ### normalize the data
@@ -222,73 +228,54 @@ if __name__ == '__main__':
     for key in x:
         x[key] = (x[key] - x_train_mean) / x_train_std
 
-    try:
-        dropout_coeff = config['dropout']
-        if dropout_coeff <= 0:
-            dropout_coeff = None
-    except:
-        dropout_coeff = None
-
-    depth_level = config['depth_level']
-    learning_rate = config['learning_rate']
-    loss_function =  config['loss_function']
-    batch_size = config['batch_size']
-
-    model, N_units, kernel_size, optimizer, loss = build_model(N_samples,
-                                                               depth_level,
-                                                               learning_rate,
-                                                               dropout_coeff,
-                                                               loss_function,
-                                                               config['optimizer'],
-                                                               full_output=True)
+    model, optimizer, loss = build_model(N_samples,
+                                         config['model_arch'],
+                                         config['loss_function'],
+                                         config['optimizer'])
     model.summary()
 
     ### train the network
-    N_epochs   = config['N_epochs']
     parameters = config.copy()
     parameters['seed'] = seed
-    parameters['data_dir'] = data_folder
-    parameters['var_name'] = var_name
-    parameters['dropout_coeff'] = dropout_coeff
     parameters['N_training_traces'] = N_training_traces
     parameters['N_samples'] = N_samples
-    parameters['N_units'] = N_units
-    parameters['kernel_size'] = kernel_size
     parameters['x_train_mean'] = x_train_mean
     parameters['x_train_std'] = x_train_std
     
+    try:
+        es_patience = config['early_stopping_patience']
+    except:
+        es_patience = None
+        parameters['early_stopping_patience'] = None
+
+    try:
+        lr_schedule = config['learning_rate_schedule']
+    except:
+        lr_schedule = None
+        parameters['learning_rate_schedule'] = None
+
+    N_epochs = config['N_epochs']
+    batch_size = config['batch_size']
+    N_batches = np.ceil(N_training_traces / batch_size)
+    parameters['N_batches'] = N_batches
+    steps_per_epoch = np.max([N_batches, 100])
+    parameters['steps_per_epoch'] = steps_per_epoch
+    output_path = args.output_dir + '/' + experiment_key
+    parameters['output_path'] = output_path
+
+    pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
+
     if log_to_comet:
         experiment.log_parameters(parameters)
 
-    output_path = args.output_dir + '/' + experiment_key
-
-    kwargs = {}
-
-    if 'es_patience' in config:
-        kwargs['early_stopping_patience'] = config['es_patience']
-
-    if 'clr_factor' in config:
-        kwargs['clr_factor'] = config['clr_factor']
-        kwargs['initial_learning_rate'] = config['learning_rate'] * 1e-2
-        kwargs['max_learning_rate'] = config['learning_rate'] * 1e2
-        for key in ('initial_learning_rate', 'max_learning_rate'):
-            try:
-                kwargs[key] = config[key]
-            except:
-                pass
-
-    if 'lrr_patience' in config and 'lrr_factor' in config:
-        if 'clr_factor' in config:
-            print_warning('Both clr_factor and (lrr_patience,lrr_factor) are present in the configuration file: will use a cyclical learning rate.')
-        else:
-            kwargs['lr_reduction_patiench'] = config['lrr_patience']
-            kwargs['lr_reduction_factor']   = config['lrr_factor']
-
-    history, steps_per_epoch = train_model(model, x, y, N_epochs, batch_size,
-                                           output_dir = output_path,
-                                           full_output = True, **kwargs)
-
-    parameters['steps_per_epoch'] = steps_per_epoch
+    history = train_model(model, x, y,
+                          N_epochs,
+                          batch_size,
+                          steps_per_epoch,
+                          output_path,
+                          es_patience,
+                          lr_schedule,
+                          verbose = 1)
 
     checkpoint_path = output_path + '/checkpoints'
     
@@ -309,11 +296,9 @@ if __name__ == '__main__':
     
     best_model.save(output_path)
     pickle.dump(test_results, open(output_path + '/test_results.pkl', 'wb'))
-    pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
     pickle.dump(history.history, open(output_path + '/history.pkl', 'wb'))
 
     if log_to_comet:
-        experiment.log_parameter('steps_per_epoch', steps_per_epoch)
         experiment.log_metric('mape_prediction', mape_prediction)
         experiment.log_model('best_model', output_path + '/saved_model.pb')
 
