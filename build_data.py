@@ -2,9 +2,12 @@
 import os
 import sys
 import json
+import glob
+import shutil
 import argparse as arg
 import numpy as np
 from scipy.interpolate import interp1d
+from tempfile import NamedTemporaryFile
 
 import pypan.ui as pan
 
@@ -77,7 +80,14 @@ if __name__ == '__main__':
     if not os.path.isfile(pan_file):
         print('{}: {}: no such file.'.format(progname, pan_file))
         sys.exit(1)
-    
+
+    with NamedTemporaryFile(prefix = os.path.splitext(os.path.basename(pan_file))[0] + '_', \
+                            suffix = '.pan', delete = False) as fid:
+        for va_file in glob.glob(os.path.dirname(pan_file) + '/*.va'):
+            shutil.copy(va_file, '/tmp')
+        shutil.copyfile(pan_file, fid.name)
+        pan_file = fid.name
+
     ok,libs = pan.load_netlist(pan_file)
     if not ok:
         print('Cannot load netlist from file {}.'.format(pan_file))
@@ -123,10 +133,10 @@ if __name__ == '__main__':
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    if not os.path.isfile(output_dir + '/' + config_file):
+    if not os.path.isfile(output_dir + '/' + os.path.basename(config_file)):
         config['dur'] = tstop
         config['Ntrials'] = N_trials
-        json.dump(config, open(output_dir + '/' + config_file, 'w'), indent=4)
+        json.dump(config, open(output_dir + '/' + os.path.basename(config_file), 'w'), indent=4)
 
     suffix = args.suffix
     if suffix != '':
@@ -149,7 +159,7 @@ if __name__ == '__main__':
 
             noise_samples = np.vstack((t, noise[j,:]))
 
-            tran_name = 'Tr_{}_{}'.format( i, j)
+            tran_name = 'Tr_{}_{}'.format(i, j)
             data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=2, maxord=2, \
                             noisefmax=frand/2, noiseinj=2, seed=random_seeds[i,j], \
                             iabstol=1e-6, devvars=1, tmax=0.1, annotate=1, \

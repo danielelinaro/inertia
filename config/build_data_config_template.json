@@ -11,5 +11,6 @@
     "mu": 0.0,
     "c": 0.5,
     "frand": 10.0,
-    "netlist": "pan/ieee14.pan"
+    "netlist": "pan/ieee14.pan",
+    "with_power": true
 }

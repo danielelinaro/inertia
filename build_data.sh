@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function usage {
-    echo "usage: ${progname} [-D damping] [-DZA dead-band width] [-f | --force]"
+    echo "usage: ${progname} [-Hmin hmin] [-Hmax hmax] [-D damping] [-DZA dead-band width] [-f | --force]"
 }
 
 progname=`basename $0`
@@ -32,6 +32,16 @@ while [[ $# -gt 0 ]] ; do
 	    usage
 	    exit 0
 	    ;;
+	-Hmin)
+	    Hmin="$2"
+	    shift
+	    shift
+	    ;;
+	-Hmax)
+	    Hmax="$2"
+	    shift
+	    shift
+	    ;;
 	*)
 	    echo "unknown option: ${key}"
 	    usage
@@ -42,9 +52,9 @@ done
 
 output_dir="data/IEEE14_D=${D}_DZA=${DZA}"
 config_template="config/build_data_config_template.json"
-training_config="training_config.json"
-test_config="test_config.json"
-validation_config="validation_config.json"
+training_config=$(mktemp --suffix "_training_config.json")
+test_config=$(mktemp --suffix "_test_config.json")
+validation_config=$(mktemp --suffix "_validation_config.json")
 
 if [ -d $output_dir ] && [ "$force" = "no" ] ; then
     echo "Directory ${output_dir} exists: use -f to force (potential) overwrite of files."
