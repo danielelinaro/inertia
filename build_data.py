@@ -8,6 +8,7 @@ import argparse as arg
 import numpy as np
 from scipy.interpolate import interp1d
 from tempfile import NamedTemporaryFile
+import tables
 
 import pypan.ui as pan
 
@@ -105,11 +106,6 @@ if __name__ == '__main__':
     pan.alter('Ald',     'D',     D,     annotate=1)
     pan.alter('Aldza',   'DZA',   DZA,   annotate=1)
 
-    omega = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in generator_ids}
-    omega['coi'] = np.zeros((N_trials, N_samples - 1))
-    omegael = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in generator_ids}
-    noise     = np.zeros((N_trials, N_samples))
-
     disk_vars = ['omega*']
     mem_vars = ['time:noise', 'omega01:noise', 'omega02:noise', 'G3:omega:noise', \
                 'G6:omega:noise', 'G8:omega:noise', 'omegacoi:noise', \
@@ -117,12 +113,10 @@ if __name__ == '__main__':
                 'omegael06:noise', 'omegael08:noise']
 
     if with_power:
-        Pe = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in generator_ids}
-        Qe = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in generator_ids}
         mem_vars.append('DevTime')
-        for i in generator_ids:
-            mem_vars.append('G{}:pe'.format(i))
-            mem_vars.append('G{}:qe'.format(i))
+        for gen_id in generator_ids:
+            mem_vars.append('G{}:pe'.format(gen_id))
+            mem_vars.append('G{}:qe'.format(gen_id))
 
     if args.output_dir is None:
         from time import strftime, localtime
@@ -130,8 +124,10 @@ if __name__ == '__main__':
     else:
         output_dir = args.output_dir
 
-    if not os.path.isdir(output_dir):
+    try:
         os.mkdir(output_dir)
+    except:
+        pass
 
     if not os.path.isfile(output_dir + '/' + os.path.basename(config_file)):
         config['dur'] = tstop
@@ -145,19 +141,43 @@ if __name__ == '__main__':
         if suffix[-1] == '_':
             suffix = suffix[:-1]
 
+    compression_filter = tables.Filters(complib='zlib', complevel=5)
+    atom = tables.Float64Atom()
+
     for i in range(N_H):
 
         pan.alter('Al{}'.format(i), 'm', 2 * H[i], instance='G1', invalidate='false')
+
+        out_file = '{}/H_{:.3f}.h5'.format(output_dir, H[i], suffix)
+
+        fid = tables.open_file(out_file, 'w', filters=compression_filter)
+        fid.root.hw_seed = hw_seed
+        fid.root.alpha = alpha
+        fid.root.mu = mu
+        fid.root.c = c
+        fid.create_array(fid.root, 'seeds', random_seeds[i,:])
+
+        arrays = {}
+        arrays['noise'] = fid.create_earray(fid.root, 'noise', atom, (0, N_samples))
+        arrays['omega_coi'] = fid.create_earray(fid.root, 'omega_coi', atom, (0, N_samples-1))
+        for gen_id in generator_ids:
+            gen = 'G{}'.format(gen_id)
+            for lbl in ('omega_', 'omegael_', 'Pe_', 'Qe_'):
+                key = lbl + gen
+                if lbl not in ('Pe_','Qe_'):
+                    arrays[key] = fid.create_earray(fid.root, key, atom, (0, N_samples-1))
+                elif with_power:
+                    arrays[key] = fid.create_earray(fid.root, key, atom, (0, N_samples-1))
 
         for j in range(N_trials):
 
             np.random.seed(random_seeds[i,j])
             rnd = c * np.sqrt(dt) * np.random.normal(size=N_samples)
-
+            noise = np.zeros(N_samples)
             for k in range(N_samples-1):
-                noise[j, k+1] = (noise[j, k] + coeff[0] + rnd[k]) * coeff[1]
-
-            noise_samples = np.vstack((t, noise[j,:]))
+                noise[k+1] = (noise[k] + coeff[0] + rnd[k]) * coeff[1]
+            noise_samples = np.vstack((t, noise))
+            arrays['noise'].append(noise[np.newaxis, :])
 
             tran_name = 'Tr_{}_{}'.format(i, j)
             data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=2, maxord=2, \
@@ -167,20 +187,29 @@ if __name__ == '__main__':
 
             get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]
 
-            time = get_var(data, mem_vars, 'time:noise')
+            try:
+                time = get_var(data, mem_vars, 'time:noise')
+                fid.create_array(fid.root, 'time', time)
+            except:
+                pass
 
-            for k in (1,2):
-                omega['G{}'.format(k)][j,:] = get_var(data, mem_vars, 'omega{:02d}:noise'.format(k))
+            for gen_id in (1,2):
+                gen = 'G{}'.format(gen_id)
+                key = 'omega_' + gen
+                arrays[key].append(get_var(data, mem_vars, 'omega{:02d}:noise'.format(gen_id))[np.newaxis,:])
 
-            for k in (3,6,8):
-                omega['G{}'.format(k)][j,:] = get_var(data, mem_vars, 'G{}:omega:noise'.format(k))
+            for gen_id in (3,6,8):
+                gen = 'G{}'.format(gen_id)
+                key = 'omega_' + gen
+                arrays[key].append(get_var(data, mem_vars, 'G{}:omega:noise'.format(gen_id))[np.newaxis,:])
 
-            omega['coi'][j,:] = get_var(data, mem_vars, 'omegacoi:noise')
+            arrays['omega_coi'].append(get_var(data, mem_vars, 'omegacoi:noise')[np.newaxis,:])
 
-            for k in generator_ids:
+            for gen_id in generator_ids:
                 # the electrical omega in PAN has zero mean, so it needs to
                 # be shifted at 1 p.u.
-                omegael['G{}'.format(k)][j,:] = 1.0 + get_var(data, mem_vars, 'omegael{:02d}:noise'.format(k))
+                key = 'omegael_G{}'.format(gen_id)
+                arrays[key].append(1.0 + get_var(data, mem_vars, 'omegael{:02d}:noise'.format(gen_id))[np.newaxis,:])
 
             if with_power:
                 dev_time = get_var(data, mem_vars, 'DevTime')
@@ -189,38 +218,16 @@ if __name__ == '__main__':
                     is_subset = True
                 except:
                     is_subset = False
-                for k in generator_ids:
-                    key = 'G{}'.format(k)
-                    for lbl,dic in zip( ('p','q'), (Pe,Qe) ):
-                        var = get_var(data, mem_vars, 'G{}:{}e'.format(k, lbl))
+                for gen_id in generator_ids:
+                    for lbl in ('p','q'):
+                        var = get_var(data, mem_vars, 'G{}:{}e'.format(gen_id, lbl))
+                        key = '{}e_G{}'.format(lbl.upper(), gen_id)
                         if is_subset:
-                            dic[key][j,:] = var[idx]
+                            arrays[key].append(var[np.newaxis,idx])
                         else:
                             f = interp1d(dev_time, var)
-                            dic[key][j,:] = f(time)
-                
-        seeds = random_seeds[i,:]
-        inertia = H[i]
+                            arrays[key].append(f(time)[np.newaxis,:])
 
-        out_file = '{}/{}{}_H_{:.3f}'.format(output_dir, os.path.splitext(os.path.basename(pan_file))[0], suffix, H[i])
+        fid.close()
 
-        kwargs = {'time': time, 'omega_coi': omega['coi']}
-
-        for i in generator_ids:
-            gen = 'G{}'.format(i)
-            kwargs['omega_' + gen] = omega[gen]
-            kwargs['omegael_' + gen] = omegael[gen]
-            if with_power:
-                kwargs['Pe_' + gen] = Pe[gen]
-                kwargs['Qe_' + gen] = Qe[gen]
-
-        kwargs['seeds'] = seeds
-        kwargs['inertia'] = inertia
-        kwargs['noise'] = noise
-        kwargs['hw_seed'] = hw_seed
-        kwargs['alpha'] = alpha
-        kwargs['mu'] = mu
-        kwargs['c'] = c
-
-        np.savez_compressed(out_file, **kwargs)
 
