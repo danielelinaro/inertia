@@ -74,7 +74,7 @@ if __name__ == '__main__':
                 'G6:omega:noise', 'G8:omega:noise', 'omegacoi:noise', \
                 'omegael01:noise', 'omegael02:noise', 'omegael03:noise', \
                 'omegael06:noise', 'omegael08:noise']
-    disk_vars = ['omega*']
+    disk_vars = ['^omega', '^G.*omega$']#, '^G[0-9]+[pq]$']
 
     ok,libs = pan.load_netlist(args.pan_file)
     if not ok:
@@ -98,7 +98,7 @@ if __name__ == '__main__':
 
     data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=2, maxord=2, \
                     noisefmax=frand/2, noiseinj=2, seed=pan_seed, \
-                    iabstol=1e-6, devvars=0, tmax=0.1, annotate=3, \
+                    iabstol=1e-6, devvars=1, tmax=0.1, annotate=3, \
                     savelist='["' + '","'.join(disk_vars) + '"]')
 
     kwargs = {}

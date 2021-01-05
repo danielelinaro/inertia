@@ -4,11 +4,12 @@ import sys
 import json
 import argparse as arg
 import numpy as np
+from scipy.interpolate import interp1d
 
 import pypan.ui as pan
 
 progname = os.path.basename(sys.argv[0])
-
+generator_ids = (1,2,3,6,8)
 
 if __name__ == '__main__':
 
@@ -16,6 +17,7 @@ if __name__ == '__main__':
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='configuration file')
+    parser.add_argument('--with-power', action='store_true', help='save also power traces')
     parser.add_argument('-d', '--dur', default=None, type=float, help='simulation duration in seconds')
     parser.add_argument('-n', '--n-trials',  default=None,  type=int, help='number of trials')
     parser.add_argument('-s', '--suffix',  default='',  type=str, help='suffix to add to the output files')
@@ -43,6 +45,13 @@ if __name__ == '__main__':
         tstop = args.dur     # [s]  simulation duration
     else:
         tstop = config['dur']
+
+    if args.with_power:
+        with_power = True
+    elif 'with_power' in config:
+        with_power = config['with_power']
+    else:
+        with_power = False
 
     # inertia values
     H_min = config['Hmin']
@@ -86,16 +95,24 @@ if __name__ == '__main__':
     pan.alter('Ald',     'D',     D,     annotate=1)
     pan.alter('Aldza',   'DZA',   DZA,   annotate=1)
 
-    omega = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in (1,2,3,6,8)}
+    omega = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in generator_ids}
     omega['coi'] = np.zeros((N_trials, N_samples - 1))
-    omegael = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in (1,2,3,6,8)}
+    omegael = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in generator_ids}
     noise     = np.zeros((N_trials, N_samples))
 
+    disk_vars = ['omega*']
     mem_vars = ['time:noise', 'omega01:noise', 'omega02:noise', 'G3:omega:noise', \
                 'G6:omega:noise', 'G8:omega:noise', 'omegacoi:noise', \
                 'omegael01:noise', 'omegael02:noise', 'omegael03:noise', \
                 'omegael06:noise', 'omegael08:noise']
-    disk_vars = ['omega*']
+
+    if with_power:
+        Pe = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in generator_ids}
+        Qe = {'G{}'.format(i): np.zeros((N_trials, N_samples - 1)) for i in generator_ids}
+        mem_vars.append('DevTime')
+        for i in generator_ids:
+            mem_vars.append('G{}:pe'.format(i))
+            mem_vars.append('G{}:qe'.format(i))
 
     if args.output_dir is None:
         from time import strftime, localtime
@@ -135,41 +152,58 @@ if __name__ == '__main__':
             tran_name = 'Tr_{}_{}'.format( i, j)
             data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=2, maxord=2, \
                             noisefmax=frand/2, noiseinj=2, seed=random_seeds[i,j], \
-                            iabstol=1e-6, devvars=0, tmax=0.1, annotate=1, \
+                            iabstol=1e-6, devvars=1, tmax=0.1, annotate=1, \
                             savelist='["' + '","'.join(disk_vars) + '"]')
 
+            get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]
+
+            time = get_var(data, mem_vars, 'time:noise')
+
             for k in (1,2):
-                var_name = 'omega{:02d}:noise'.format(k)
-                idx = mem_vars.index(var_name)
-                omega['G{}'.format(k)][j,:] = data[idx,:]
+                omega['G{}'.format(k)][j,:] = get_var(data, mem_vars, 'omega{:02d}:noise'.format(k))
 
             for k in (3,6,8):
-                var_name = 'G{}:omega:noise'.format(k)
-                idx = mem_vars.index(var_name)
-                omega['G{}'.format(k)][j,:] = data[idx,:]
+                omega['G{}'.format(k)][j,:] = get_var(data, mem_vars, 'G{}:omega:noise'.format(k))
 
-            idx = mem_vars.index('omegacoi:noise')
-            omega['coi'][j,:] = data[idx,:]
+            omega['coi'][j,:] = get_var(data, mem_vars, 'omegacoi:noise')
 
-            for k in (1,2,3,6,8):
-                var_name = 'omegael{:02d}:noise'.format(k)
-                idx = mem_vars.index(var_name)
+            for k in generator_ids:
                 # the electrical omega in PAN has zero mean, so it needs to
                 # be shifted at 1 p.u.
-                omegael['G{}'.format(k)][j,:] = data[idx,:] + 1.0
+                omegael['G{}'.format(k)][j,:] = 1.0 + get_var(data, mem_vars, 'omegael{:02d}:noise'.format(k))
 
-        time = data[0,:]
+            if with_power:
+                dev_time = get_var(data, mem_vars, 'DevTime')
+                try:
+                    idx = np.array([np.where(dev_time == tt)[0][0] for tt in time])
+                    is_subset = True
+                except:
+                    is_subset = False
+                for k in generator_ids:
+                    key = 'G{}'.format(k)
+                    for lbl,dic in zip( ('p','q'), (Pe,Qe) ):
+                        var = get_var(data, mem_vars, 'G{}:{}e'.format(k, lbl))
+                        if is_subset:
+                            dic[key][j,:] = var[idx]
+                        else:
+                            f = interp1d(dev_time, var)
+                            dic[key][j,:] = f(time)
+                
         seeds = random_seeds[i,:]
         inertia = H[i]
 
         out_file = '{}/{}{}_H_{:.3f}'.format(output_dir, os.path.splitext(os.path.basename(pan_file))[0], suffix, H[i])
 
-        kwargs = {'time': time}
-        for i in (1,2,3,6,8):
-            kwargs['omega_G{}'.format(i)] = omega['G{}'.format(i)]
-        kwargs['omega_coi'] = omega['coi']
-        for i in (1,2,3,6,8):
-            kwargs['omegael_G{}'.format(i)] = omegael['G{}'.format(i)]
+        kwargs = {'time': time, 'omega_coi': omega['coi']}
+
+        for i in generator_ids:
+            gen = 'G{}'.format(i)
+            kwargs['omega_' + gen] = omega[gen]
+            kwargs['omegael_' + gen] = omegael[gen]
+            if with_power:
+                kwargs['Pe_' + gen] = Pe[gen]
+                kwargs['Qe_' + gen] = Qe[gen]
+
         kwargs['seeds'] = seeds
         kwargs['inertia'] = inertia
         kwargs['noise'] = noise
