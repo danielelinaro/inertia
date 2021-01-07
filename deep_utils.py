@@ -1,4 +1,7 @@
 
+import os
+import re
+import tables
 import numpy as np
 import tensorflow as tf
 
@@ -10,20 +13,40 @@ def load_one_block(filename, varname, trial_dur = 60, verbose = False):
     """
     This function loads a single data file containing the results of the simulations for one value of inertia
     """
-    data = np.load(filename)
-    orig_n_trials, orig_n_samples = data[varname].shape
-    dt = np.diff(data['time'][:2])[0]
+    ext = os.path.splitext(filename)[1]
+
+    if ext == '.npz':
+        data = np.load(filename)
+        time = data['time']
+        var = data[varname]
+        inertia = data['inertia']
+    elif ext == '.h5':
+        fid = tables.open_file(filename, 'r')
+        time = fid.root.time.read()
+        var = fid.root[varname].read()
+        try:
+            pars = fid.root.parameters.read()
+            inertia = pars['inertia'][0]
+        except:
+            inertia = float(re.findall('\d+.\d+', os.path.basename(filename))[0])
+        fid.close()
+    else:
+        raise Exception('Unknown file format')
+
+    dt = np.diff(time[:2])[0]
+    orig_n_trials, orig_n_samples = var.shape
     n_samples = int(trial_dur / dt)
     n_trials = int(orig_n_trials * orig_n_samples / n_samples)
-    var = np.reshape(data[varname], [n_trials, n_samples], order='C')
-    time = data['time'][:n_samples]
+    time = time[:n_samples]
+    var = np.reshape(var, [n_trials, n_samples], order='C')
+
     if verbose:
         print('There are {} trials, each of which contains {} samples.'.\
               format(n_trials, n_samples))
+
     return tf.constant(time, dtype=tf.float32), \
            tf.constant(var, dtype=tf.float32), \
-           tf.constant([float(data['inertia']) for _ in range(n_trials)], \
-                       shape=(n_trials,1), dtype=tf.float32)
+           tf.constant([inertia for _ in range(n_trials)], shape=(n_trials,1), dtype=tf.float32)
 
 
 def load_data(folder, inertia, var_name='omega_coi'):
@@ -33,9 +56,10 @@ def load_data(folder, inertia, var_name='omega_coi'):
     y = {}
     for key,H in inertia.items():
         for h in H:
-            time, omega, inertia = load_one_block(folder + \
-                                                  'ieee14_{}_set_H_{:.3f}.npz'.format(key, h), \
-                                                  var_name, 60)
+            filename = folder + 'H_{:.3f}_{}_set.h5'.format(h, key)
+            if not os.path.isfile(filename):
+                filename = folder + 'ieee14_{}_set_H_{:.3f}.npz'.format(key, h)
+            time, omega, inertia = load_one_block(filename, var_name, 60)
             try:
                 x[key] = tf.concat([x[key], omega], axis=0)
                 y[key] = tf.concat([y[key], inertia], axis=0)

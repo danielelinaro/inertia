@@ -144,17 +144,33 @@ if __name__ == '__main__':
     compression_filter = tables.Filters(complib='zlib', complevel=5)
     atom = tables.Float64Atom()
 
+    class Parameters (tables.IsDescription):
+        hw_seed = tables.Float64Col()
+        alpha   = tables.Float64Col()
+        mu      = tables.Float64Col()
+        c       = tables.Float64Col()
+        inertia = tables.Float64Col()
+
     for i in range(N_H):
 
         pan.alter('Al{}'.format(i), 'm', 2 * H[i], instance='G1', invalidate='false')
 
-        out_file = '{}/H_{:.3f}.h5'.format(output_dir, H[i], suffix)
+        out_file = '{}/H_{:.3f}{}.h5'.format(output_dir, H[i], suffix)
+
+        if os.path.isfile(out_file):
+            continue
 
         fid = tables.open_file(out_file, 'w', filters=compression_filter)
-        fid.root.hw_seed = hw_seed
-        fid.root.alpha = alpha
-        fid.root.mu = mu
-        fid.root.c = c
+        tbl = fid.create_table(fid.root, 'parameters', Parameters, 'parameters')
+        params = tbl.row
+        params['hw_seed'] = hw_seed
+        params['alpha']   = alpha
+        params['mu']      = mu
+        params['c']       = c
+        params['inertia'] = H[i]
+        params.append()
+        tbl.flush()
+
         fid.create_array(fid.root, 'seeds', random_seeds[i,:])
 
         arrays = {}

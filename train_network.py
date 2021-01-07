@@ -217,7 +217,10 @@ if __name__ == '__main__':
 
     inertia = {}
     for key in ('training', 'test', 'validation'):
-        inertia[key] = np.sort([float(re.findall('[0-9]+\.[0-9]*', f)[-1]) for f in glob.glob(data_folder + '/*' + key + '*.npz')])
+        for ext in ('.h5', '.npz'):
+            inertia[key] = np.sort([float(re.findall('[0-9]+\.[0-9]*', f)[-1]) for f in glob.glob(data_folder + '/*' + key + '*' + ext)])
+            if len(inertia[key]) > 0:
+                break
 
     time, x, y = load_data(data_folder, inertia, config['var_name'])
     N_training_traces, N_samples = x['training'].shape
