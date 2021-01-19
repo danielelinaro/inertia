@@ -75,6 +75,8 @@ if __name__ == '__main__':
     dt = 1 / frand
     t = dt + np.r_[0 : tstop + dt/2 : dt]
     N_samples = t.size
+    noise_samples = np.zeros((2, N_samples))
+    noise_samples[0,:] = t
     coeff = np.array([alpha * mu * dt, 1 / (1 + alpha * dt)])
 
     pan_file = config['netlist']
@@ -150,16 +152,21 @@ if __name__ == '__main__':
         mu      = tables.Float64Col()
         c       = tables.Float64Col()
         inertia = tables.Float64Col()
+        D       = tables.Float64Col()
+        DZA     = tables.Float64Col()
+        F0      = tables.Float64Col()
+        frand   = tables.Float64Col()
 
     for i in range(N_H):
 
-        pan.alter('Al{}'.format(i), 'm', 2 * H[i], instance='G1', invalidate='false')
+        pan.alter('Al', 'm', 2 * H[i], instance='G1', invalidate='false')
 
         out_file = '{}/H_{:.3f}{}.h5'.format(output_dir, H[i], suffix)
 
         if os.path.isfile(out_file):
             continue
 
+        ### first of all, write to file all the data and parameters that we already have
         fid = tables.open_file(out_file, 'w', filters=compression_filter)
         tbl = fid.create_table(fid.root, 'parameters', Parameters, 'parameters')
         params = tbl.row
@@ -168,64 +175,68 @@ if __name__ == '__main__':
         params['mu']      = mu
         params['c']       = c
         params['inertia'] = H[i]
+        params['D']       = D
+        params['DZA']     = DZA
+        params['F0']      = F0
+        params['frand']   = frand
         params.append()
         tbl.flush()
-
         fid.create_array(fid.root, 'seeds', random_seeds[i,:])
-
-        arrays = {}
-        arrays['noise'] = fid.create_earray(fid.root, 'noise', atom, (0, N_samples))
-        arrays['omega_coi'] = fid.create_earray(fid.root, 'omega_coi', atom, (0, N_samples-1))
+        fid.create_earray(fid.root, 'noise', atom, (0, N_samples))
+        fid.create_earray(fid.root, 'omega_coi', atom, (0, N_samples-1))
         for gen_id in generator_ids:
             gen = 'G{}'.format(gen_id)
             for lbl in ('omega_', 'omegael_', 'Pe_', 'Qe_'):
                 key = lbl + gen
                 if lbl not in ('Pe_','Qe_'):
-                    arrays[key] = fid.create_earray(fid.root, key, atom, (0, N_samples-1))
+                    fid.create_earray(fid.root, key, atom, (0, N_samples-1))
                 elif with_power:
-                    arrays[key] = fid.create_earray(fid.root, key, atom, (0, N_samples-1))
+                    fid.create_earray(fid.root, key, atom, (0, N_samples-1))
+        # close the file so that other programs can read it
+        fid.close()
 
         for j in range(N_trials):
 
+            # build the noisy samples
             np.random.seed(random_seeds[i,j])
             rnd = c * np.sqrt(dt) * np.random.normal(size=N_samples)
-            noise = np.zeros(N_samples)
+            noise_samples[1, 0] = 0.
             for k in range(N_samples-1):
-                noise[k+1] = (noise[k] + coeff[0] + rnd[k]) * coeff[1]
-            noise_samples = np.vstack((t, noise))
-            arrays['noise'].append(noise[np.newaxis, :])
+                noise_samples[1, k+1] = (noise_samples[1, k] + coeff[0] + rnd[k]) * coeff[1]
 
-            tran_name = 'Tr_{}_{}'.format(i, j)
-            data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=2, maxord=2, \
+            # run a transient analysis
+            data = pan.tran('Tr', tstop, mem_vars, nettype=1, method=2, maxord=2, \
                             noisefmax=frand/2, noiseinj=2, seed=random_seeds[i,j], \
                             iabstol=1e-6, devvars=1, tmax=0.1, annotate=1, \
                             savelist='["' + '","'.join(disk_vars) + '"]')
 
+            # save the results to file
             get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]
 
-            try:
+            fid = tables.open_file(out_file, 'a')
+
+            fid.root.noise.append(noise_samples[1, np.newaxis, :])
+            fid.root.omega_coi.append(get_var(data, mem_vars, 'omegacoi:noise')[np.newaxis,:])
+
+            if j == 0:
                 time = get_var(data, mem_vars, 'time:noise')
                 fid.create_array(fid.root, 'time', time)
-            except:
-                pass
 
             for gen_id in (1,2):
                 gen = 'G{}'.format(gen_id)
                 key = 'omega_' + gen
-                arrays[key].append(get_var(data, mem_vars, 'omega{:02d}:noise'.format(gen_id))[np.newaxis,:])
+                fid.root[key].append(get_var(data, mem_vars, 'omega{:02d}:noise'.format(gen_id))[np.newaxis,:])
 
             for gen_id in (3,6,8):
                 gen = 'G{}'.format(gen_id)
                 key = 'omega_' + gen
-                arrays[key].append(get_var(data, mem_vars, 'G{}:omega:noise'.format(gen_id))[np.newaxis,:])
-
-            arrays['omega_coi'].append(get_var(data, mem_vars, 'omegacoi:noise')[np.newaxis,:])
+                fid.root[key].append(get_var(data, mem_vars, 'G{}:omega:noise'.format(gen_id))[np.newaxis,:])
 
             for gen_id in generator_ids:
                 # the electrical omega in PAN has zero mean, so it needs to
                 # be shifted at 1 p.u.
                 key = 'omegael_G{}'.format(gen_id)
-                arrays[key].append(1.0 + get_var(data, mem_vars, 'omegael{:02d}:noise'.format(gen_id))[np.newaxis,:])
+                fid.root[key].append(1.0 + get_var(data, mem_vars, 'omegael{:02d}:noise'.format(gen_id))[np.newaxis,:])
 
             if with_power:
                 dev_time = get_var(data, mem_vars, 'DevTime')
@@ -239,11 +250,10 @@ if __name__ == '__main__':
                         var = get_var(data, mem_vars, 'G{}:{}e'.format(gen_id, lbl))
                         key = '{}e_G{}'.format(lbl.upper(), gen_id)
                         if is_subset:
-                            arrays[key].append(var[np.newaxis,idx])
+                            fid.root[key].append(var[np.newaxis,idx])
                         else:
                             f = interp1d(dev_time, var)
-                            arrays[key].append(f(time)[np.newaxis,:])
+                            fid.root[key].append(f(time)[np.newaxis,:])
 
-        fid.close()
-
+            fid.close()
 

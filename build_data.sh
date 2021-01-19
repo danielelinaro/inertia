@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]] ; do
     esac
 done
 
-output_dir="data/IEEE14_D=${D}_DZA=${DZA}"
+output_dir="in_progress/IEEE14_D=${D}_DZA=${DZA}"
 config_template="config/build_data_config_template.json"
 training_config=$(mktemp --suffix "_training_config.json")
 test_config=$(mktemp --suffix "_test_config.json")
@@ -62,7 +62,7 @@ if [ -d $output_dir ] && [ "$force" = "no" ] ; then
 fi
 
 sed -e 's/{HMIN}/'$Hmin'/' -e 's/{HMAX}/'$Hmax'/' -e 's/{D}/'$D'/' \
-    -e 's/{DZA}/'$DZA'/' -e 's/{N}/5000/' ${config_template} > ${training_config}
+    -e 's/{DZA}/'$DZA'/' -e 's/{N}/3000/' ${config_template} > ${training_config}
 
 Hmin=`echo $Hmin+0.333333 | bc`
 Hmax=`echo $Hmax+0.333333 | bc`

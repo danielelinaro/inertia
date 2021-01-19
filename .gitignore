@@ -9,5 +9,6 @@ __pycache__
 *.raw
 *~
 data
+in_progress
 experiments
 
