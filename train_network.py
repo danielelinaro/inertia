@@ -11,6 +11,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from comet_ml import Experiment
 import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers, losses, optimizers, callbacks, models
 import tensorflow_addons as tfa
 from deep_utils import *
 
@@ -20,23 +22,50 @@ print_warning = lambda msg: print(f'{cm.Fore.YELLOW}' + msg + f'{cm.Style.RESET_
 print_msg     = lambda msg: print(f'{cm.Fore.GREEN}'  + msg + f'{cm.Style.RESET_ALL}')
 
 
+def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, input_name):
+    inp = keras.Input(shape=(N_samples, 1), name=input_name)
+    for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
+        try:
+            conv = layers.Conv1D(N_conv, sz, activation=None)(pool)
+        except:
+            conv = layers.Conv1D(N_conv, sz, activation=None)(inp)
+        pool = layers.MaxPooling1D(N_pooling)(conv)
+        relu = layers.ReLU()(pool)
+    return inp,relu
 
-def build_model(N_samples, model_arch, loss_fun_pars, optimizer_pars):
+
+def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, input_name):
+    inp = keras.Input(shape=(N_samples, 2, 1), name=input_name)
+    for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
+        try:
+            conv = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(pool)
+        except:
+            conv = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(inp)
+        pool = layers.MaxPooling2D([N_pooling, 1])(conv)
+        relu = layers.ReLU()(pool)
+    return inp,relu
+
+
+def build_model(N_samples, var_names, model_arch, loss_fun_pars, optimizer_pars):
     """
     Builds and compiles the model
     
-    The network topology used here is taken from the following paper:
+    The basic network topology used here is taken from the following paper:
    
     George, D., & Huerta, E. A. (2018).
     Deep neural networks to enable real-time multimessenger astrophysics.
     Physical Review D, 97(4), 044039. http://doi.org/10.1103/PhysRevD.97.044039
     """
 
+    N_dims = model_arch['N_dims']
+    if N_dims not in (1,2):
+        raise Exception('The number of dimensions of the data must be either 1 or 2')
+
     loss_fun_name = loss_fun_pars['name'].lower()
     if loss_fun_name == 'mae':
-        loss = tf.keras.losses.MeanAbsoluteError()
+        loss = losses.MeanAbsoluteError()
     elif loss_fun_name == 'mape':
-        loss = tf.keras.losses.MeanAbsolutePercentageError()
+        loss = losses.MeanAbsolutePercentageError()
     else:
         raise Exception('Unknown loss function: {}.'.format(loss_function))
 
@@ -45,46 +74,59 @@ def build_model(N_samples, model_arch, loss_fun_pars, optimizer_pars):
     if optimizer_name == 'sgd':
         momentum = optimizer_pars['momentum'] if 'momentum' in optimizer_pars else 0.
         nesterov = optimizer_pars['nesterov'] if 'nesterov' in optimizer_pars else False
-        optimizer = tf.keras.optimizers.SGD(learning_rate, momentum, nesterov)
+        optimizer = optimizers.SGD(learning_rate, momentum, nesterov)
     elif optimizer_name in ('adam', 'adamax', 'nadam'):
         beta_1 = optimizer_pars['beta_1'] if 'beta_1' in optimizer_pars else 0.9
         beta_2 = optimizer_pars['beta_2'] if 'beta_2' in optimizer_pars else 0.999
         if optimizer_name == 'adam':
-            optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1, beta_2)
+            optimizer = optimizers.Adam(learning_rate, beta_1, beta_2)
         elif optimizer_name == 'adamax':
-            optimizer = tf.keras.optimizers.Adamax(learning_rate, beta_1, beta_2)
+            optimizer = optimizers.Adamax(learning_rate, beta_1, beta_2)
         else:
-            optimizer = tf.keras.optimizers.Nadam(learning_rate, beta_1, beta_2)
+            optimizer = optimizers.Nadam(learning_rate, beta_1, beta_2)
     elif optimizer_name == 'adagrad':
         initial_accumulator_value = optimizer_pars['initial_accumulator_value'] if \
                                     'initial_accumulator_value' in optimizer_pars else 0.1
-        optimizer = tf.keras.optimizers.Adagrad(learning_rate, initial_accumulator_value)
+        optimizer = optimizers.Adagrad(learning_rate, initial_accumulator_value)
     elif optimizer_name == 'adadelta':
         rho = optimizer_pars['rho'] if 'rho' in optimizer_pars else 0.95
-        optimizer = tf.keras.optimizers.Adadelta(learning_rate, rho)
+        optimizer = optimizers.Adadelta(learning_rate, rho)
     else:
         raise Exception('Unknown optimizer: {}.'.format(optimizer_name))
 
     N_units = model_arch['N_units']
     kernel_size = model_arch['kernel_size']
 
-    model = tf.keras.models.Sequential([
-        tf.keras.layers.Reshape((N_samples,1), input_shape=(N_samples,)),
-    ])
+    if N_dims == 1:
+        inputs = []
+        relus = []
+        for var_name in var_names:
+            inp,rel = make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, var_name)
+            inputs.append(inp)
+            relus.append(rel)
+    else:
+        inputs,relu = make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, '_'.join(var_names))
+        relus = [relu]
 
-    for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
-        model.add(tf.keras.layers.Conv1D(N_conv, sz, activation=None))
-        model.add(tf.keras.layers.MaxPooling1D(N_pooling))
-        model.add(tf.keras.layers.ReLU())
-    
-    model.add(tf.keras.layers.Flatten())
+    if len(relus) > 1:
+        concat = layers.concatenate(relus)
+        flatten = layers.Flatten()(concat)
+    else:
+        flatten = layers.Flatten()(relus[0])
+
     for n in N_units['dense']:
-        model.add(tf.keras.layers.Dense(n, activation='relu'))
+        try:
+            dense = layers.Dense(n, activation='relu')(dense)
+        except:
+            dense = layers.Dense(n, activation='relu')(flatten)
 
     if model_arch['dropout_coeff'] > 0:
-        model.add(tf.keras.layers.Dropout(model_arch['dropout_coeff']))
+        drop = layers.Dropout(model_arch['dropout_coeff'])(dense)
+        output_tensor = layers.Dense(y['training'].shape[1])(drop)
+    else:
+        output_tensor = layers.Dense(y['training'].shape[1])(dense)
 
-    model.add(tf.keras.layers.Dense(y['training'].shape[1]))
+    model = keras.Model(inputs=inputs, outputs=output_tensor)
 
     model.compile(optimizer=optimizer, loss=loss)
 
@@ -105,20 +147,20 @@ def train_model(model, x, y,
     os.makedirs(checkpoint_dir)
 
     # create a callback that saves the model's weights
-    checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(filepath = checkpoint_dir + \
-                                                       '/weights.{epoch:02d}-{val_loss:.2f}.h5',
-                                                       save_weights_only = False,
-                                                       save_best_only = True,
-                                                       monitor = 'val_loss',
-                                                       verbose = verbose)
+    checkpoint_cb = callbacks.ModelCheckpoint(filepath = checkpoint_dir + \
+                                              '/weights.{epoch:02d}-{val_loss:.2f}.h5',
+                                              save_weights_only = False,
+                                              save_best_only = True,
+                                              monitor = 'val_loss',
+                                              verbose = verbose)
     cbs = [checkpoint_cb]
 
     if early_stopping_patience is not None:
         # create a callback that will stop the optimization if there is no improvement
-        early_stop_cb = tf.keras.callbacks.EarlyStopping(monitor = 'val_loss',
-                                                         patience = early_stopping_patience,
-                                                         verbose = verbose,
-                                                         mode = 'min')
+        early_stop_cb = callbacks.EarlyStopping(monitor = 'val_loss',
+                                                patience = early_stopping_patience,
+                                                verbose = verbose,
+                                                mode = 'min')
 
         cbs.append(early_stop_cb)
         print_msg('Added a callback for early stopping.')
@@ -139,7 +181,7 @@ def train_model(model, x, y,
                 initial_learning_rate = learning_rate_schedule['initial_learning_rate'],
                 maximal_learning_rate = learning_rate_schedule['max_learning_rate'],
                 step_size = x['training'].shape[0] // batch_size * learning_rate_schedule['factor'])
-            lr_scheduler_cb = tf.keras.callbacks.LearningRateScheduler(schedule, verbose)
+            lr_scheduler_cb = callbacks.LearningRateScheduler(schedule, verbose)
             cbs.append(lr_scheduler_cb)
             print_msg('Added a callback for cyclical learning rate scheduling.')
 
@@ -151,13 +193,13 @@ def train_model(model, x, y,
                        in learning_rate_schedule else patience / 10
             min_lr = learning_rate_schedule['min_learning_rate'] if 'min_learning_rate' \
                      in learning_rate_schedule else optimizer_lr / 1000
-            reduce_lr_cb = tf.keras.callbacks.ReduceLROnPlateau(monitor = 'val_loss',
-                                                                factor = factor,
-                                                                patience = patience,
-                                                                verbose = verbose,
-                                                                mode = 'min',
-                                                                cooldown = cooldown,
-                                                                min_lr = min_lr)
+            reduce_lr_cb = callbacks.ReduceLROnPlateau(monitor = 'val_loss',
+                                                       factor = factor,
+                                                       patience = patience,
+                                                       verbose = verbose,
+                                                       mode = 'min',
+                                                       cooldown = cooldown,
+                                                       min_lr = min_lr)
             cbs.append(reduce_lr_cb)
             print_msg('Added a callback for reducing learning rate on plateaus.')
 
@@ -167,9 +209,22 @@ def train_model(model, x, y,
     except:
         print_warning('Not adding a callback for learning rate scheduling.')
 
-    return model.fit(x['training'], y['training'], epochs=N_epochs, batch_size=batch_size,
-                     steps_per_epoch=steps_per_epoch, validation_data=(x['validation'], y['validation']),
-                     verbose=verbose, callbacks=cbs)
+    if len(model.inputs) == 1:
+        x_training = x['training']
+        x_validation = x['validation']
+    else:
+        input_names = [inp.name.split(':')[0] for inp in model.inputs]
+        x_training = {name: x['training'][i] for i,name in enumerate(input_names)}
+        x_validation = {name: x['validation'][i] for i,name in enumerate(input_names)}
+
+    return model.fit(x_training,
+                     y['training'],
+                     epochs = N_epochs,
+                     batch_size = batch_size,
+                     steps_per_epoch = steps_per_epoch,
+                     validation_data = (x_validation, y['validation']),
+                     verbose = verbose,
+                     callbacks = cbs)
 
 
 
@@ -218,26 +273,32 @@ if __name__ == '__main__':
     inertia = {}
     for key in ('training', 'test', 'validation'):
         for ext in ('.h5', '.npz'):
-            inertia[key] = np.sort([float(re.findall('[0-9]+\.[0-9]*', f)[-1]) for f in glob.glob(data_folder + '/*' + key + '*' + ext)])
+            inertia[key] = np.sort([float(re.findall('[0-9]+\.[0-9]*', f)[-1]) \
+                                    for f in glob.glob(data_folder + '/*' + key + '*' + ext)])
             if len(inertia[key]) > 0:
                 break
 
-    time, x, y = load_data(data_folder, inertia, config['var_name'])
-    N_training_traces, N_samples = x['training'].shape
+    var_names = config['var_names']
+    time, x, y = load_data(data_folder, inertia, var_names)
+    N_vars, N_training_traces, N_samples = x['training'].shape
 
     ### normalize the data
-    x_train_mean = np.mean(x['training'])
-    x_train_std = np.std(x['training'])
+    x_train_mean = np.mean(x['training'], axis=(1, 2))
+    x_train_std = np.std(x['training'], axis=(1, 2))
     for key in x:
-        x[key] = (x[key] - x_train_mean) / x_train_std
+        x[key] = tf.constant([(x[key][i].numpy() - m) / s for i,(m,s) in enumerate(zip(x_train_mean, x_train_std))])
 
+    ### build the network
+    optimizer_pars = config['optimizer'][config['optimizer']['name']]
+    optimizer_pars['name'] = config['optimizer']['name']
     model, optimizer, loss = build_model(N_samples,
+                                         var_names,
                                          config['model_arch'],
                                          config['loss_function'],
-                                         config['optimizer'])
+                                         optimizer_pars)
     model.summary()
 
-    ### train the network
+    ### store all the parameters
     parameters = config.copy()
     parameters['seed'] = seed
     parameters['N_training_traces'] = N_training_traces
@@ -251,9 +312,11 @@ if __name__ == '__main__':
         es_patience = None
         parameters['early_stopping_patience'] = None
 
-    try:
-        lr_schedule = config['learning_rate_schedule']
-    except:
+    if 'learning_rate_schedule' in config and \
+       config['learning_rate_schedule']['name'].lower() != 'none':
+        lr_schedule = config['learning_rate_schedule'][config['learning_rate_schedule']['name']]
+        lr_schedule['name'] = config['learning_rate_schedule']['name']
+    else:
         lr_schedule = None
         parameters['learning_rate_schedule'] = None
 
@@ -269,6 +332,12 @@ if __name__ == '__main__':
     if log_to_comet:
         experiment.log_parameters(parameters)
 
+    ### reshape the data to agree with the network architecture
+    if config['model_arch']['N_dims'] == 2:
+        for key in x:
+            x[key] = tf.transpose(x[key], perm=(1,2,0))
+
+    ### train the network
     history = train_model(model, x, y,
                           N_epochs,
                           batch_size,
@@ -284,14 +353,18 @@ if __name__ == '__main__':
     checkpoint_files = glob.glob(checkpoint_path + '/*.h5')
     val_loss = [float(file[:-3].split('-')[-1]) for file in checkpoint_files]
     best_checkpoint = checkpoint_files[np.argmin(val_loss)]
-    best_model = tf.keras.models.load_model(best_checkpoint)
+    best_model = models.load_model(best_checkpoint)
 
     ### compute the network prediction on the test set
-    y_prediction = np.squeeze(best_model.predict(x['test']))
+    if len(model.inputs) == 1:
+        y_prediction = np.squeeze(best_model.predict(x['test']))
+    else:
+        y_prediction = np.squeeze(best_model.predict({var_name: x['test'][i] for i,var_name
+                                                      in enumerate(var_names)}))
 
     ### compute the mean absolute percentage error on the CNN prediction
     y_test = np.squeeze(y['test'].numpy())
-    mape_prediction = tf.keras.losses.mean_absolute_percentage_error(y_test, y_prediction).numpy()
+    mape_prediction = losses.mean_absolute_percentage_error(y_test, y_prediction).numpy()
     print_msg('MAPE on CNN prediction ... {:.2f}%'.format(mape_prediction))
     test_results = {'y_test': y_test, 'y_prediction': y_prediction, 'mape_prediction': mape_prediction}
     
@@ -304,7 +377,10 @@ if __name__ == '__main__':
         experiment.log_metric('mape_prediction', mape_prediction)
         experiment.log_model('best_model', output_path + '/saved_model.pb')
 
-    fig,(ax1,ax2) = plt.subplots(1, 2, figsize=(10,4))
+    ### plot a graph of the network topology
+    keras.utils.plot_model(model, output_path + '/network_topology.pdf', show_shapes=True, dpi=300)
+
+    fig,(ax1,ax2) = plt.subplots(1, 2, figsize=(6,3))
     ### plot the loss as a function of the epoch number
     epochs = np.r_[0 : len(history.history['loss'])] + 1
     ax1.plot(epochs, history.history['loss'], 'k', label='Training')
@@ -328,5 +404,6 @@ if __name__ == '__main__':
     ax2.set_xlabel('Expected value')
     ax2.set_ylabel('Predicted value')
     ax2.axis([1.8, limits[1], 0, limits[1]])
+    fig.tight_layout()
     plt.savefig(output_path + '/summary.pdf')
 
