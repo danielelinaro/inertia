@@ -72,3 +72,5 @@ if [ $outdir = $indir ] ; then
     mv $infile $infile.bak
 fi
 mv $tmpfile $outfile
+bzip2 $outfile
+

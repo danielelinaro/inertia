@@ -26,7 +26,7 @@ def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, input_name):
     inp = keras.Input(shape=(N_samples, 1), name=input_name)
     for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
         try:
-            conv = layers.Conv1D(N_conv, sz, activation=None)(pool)
+            conv = layers.Conv1D(N_conv, sz, activation=None)(relu)
         except:
             conv = layers.Conv1D(N_conv, sz, activation=None)(inp)
         pool = layers.MaxPooling1D(N_pooling)(conv)
@@ -38,7 +38,7 @@ def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, input_name):
     inp = keras.Input(shape=(N_samples, 2, 1), name=input_name)
     for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
         try:
-            conv = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(pool)
+            conv = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(relu)
         except:
             conv = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(inp)
         pool = layers.MaxPooling2D([N_pooling, 1])(conv)

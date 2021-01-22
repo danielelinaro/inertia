@@ -2,7 +2,7 @@
     "data_dir": "data/IEEE14_D=2_DZA=60.0",
     "var_names": ["omega_G1", "Pe_G1"],
     "model_arch": {
-	"N_dims": 2,
+	"N_dims": 1,
 	"N_units": {
 	    "conv": [16, 32, 64],
 	    "pooling": [4, 4, 4],
