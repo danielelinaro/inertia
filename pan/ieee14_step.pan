@@ -55,7 +55,7 @@ Step control begin
     max_idx = length(Time);
     
     Tr tran tstop=TSTOP nettype=1 method=2 maxord=2 noisefmax=FRAND/2 noiseinj=2 \
-                  seed=5061983 iabstol=1u tmax=0.1 annotate=4 devvars=no \
+                  seed=5061983 iabstol=1u tmax=0.1 annotate=4 devvars=yes \
                   savelist=["omega*"] begin
     
         if( idx <= max_idx && time > Time( idx ) )
