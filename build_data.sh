@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function usage {
-    echo "usage: ${progname} [-Hmin hmin] [-Hmax hmax] [-D damping] [-DZA dead-band width] [-f | --force]"
+    echo "usage: ${progname} [-Hmin hmin] [-Hmax hmax] [-G gen_id] [-D damping] [-DZA dead-band width] [-f | --force]"
 }
 
 progname=`basename $0`
@@ -9,6 +9,7 @@ D="2"
 DZA="60.0"
 Hmin="2.0"
 Hmax="10.0"
+generator="1"
 force="no"
 
 while [[ $# -gt 0 ]] ; do
@@ -21,6 +22,11 @@ while [[ $# -gt 0 ]] ; do
 	    ;;
 	-DZA)
 	    DZA="$2"
+	    shift
+	    shift
+	    ;;
+	-G)
+	    generator="$2"
 	    shift
 	    shift
 	    ;;
@@ -61,17 +67,17 @@ if [ -d $output_dir ] && [ "$force" = "no" ] ; then
     exit 1
 fi
 
-sed -e 's/{HMIN}/'$Hmin'/' -e 's/{HMAX}/'$Hmax'/' -e 's/{D}/'$D'/' \
+sed -e 's/{HMIN}/'$Hmin'/' -e 's/{HMAX}/'$Hmax'/' -e 's/{D}/'$D'/' -e 's/{GEN_ID}/'$generator'/' \
     -e 's/{DZA}/'$DZA'/' -e 's/{N}/3000/' ${config_template} > ${training_config}
 
 Hmin=`echo $Hmin+0.333333 | bc`
 Hmax=`echo $Hmax+0.333333 | bc`
-sed -e 's/{HMIN}/'$Hmin'/' -e 's/{HMAX}/'$Hmax'/' -e 's/{D}/'$D'/' \
+sed -e 's/{HMIN}/'$Hmin'/' -e 's/{HMAX}/'$Hmax'/' -e 's/{D}/'$D'/' -e 's/{GEN_ID}/'$generator'/' \
     -e 's/{DZA}/'$DZA'/' -e 's/{N}/100/' ${config_template} > ${test_config}
 
 Hmin=`echo $Hmin+0.333333 | bc`
 Hmax=`echo $Hmax+0.333333 | bc`
-sed -e 's/{HMIN}/'$Hmin'/' -e 's/{HMAX}/'$Hmax'/' -e 's/{D}/'$D'/' \
+sed -e 's/{HMIN}/'$Hmin'/' -e 's/{HMAX}/'$Hmax'/' -e 's/{D}/'$D'/' -e 's/{GEN_ID}/'$generator'/' \
     -e 's/{DZA}/'$DZA'/' -e 's/{N}/100/' ${config_template} > ${validation_config}
 
 python3 build_data.py -s training_set -o ${output_dir} ${training_config} > training_data.log

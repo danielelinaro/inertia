@@ -1,6 +1,7 @@
 {
     "Hmin": {HMIN},
     "Hmax": {HMAX},
+    "gen_id": {GEN_ID},
     "Hstep": 1.0,
     "D": {D},
     "DZA": {DZA},

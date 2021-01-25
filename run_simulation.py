@@ -30,8 +30,9 @@ if __name__ == '__main__':
     parser = arg.ArgumentParser(description = 'Simulate the IEEE14 network at a fixed value of inertia', \
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
-    parser.add_argument('pan_file', type=str, action='store', nargs='?', default='ieee14.pan', help='PAN netlist')
+    parser.add_argument('pan_file', type=str, action='store', help='PAN netlist')
     parser.add_argument('-H', '--inertia',  type=float, required=True, help='inertia value')
+    parser.add_argument('-G', '--gen-id',  type=int, default=1, help='generator id')
     parser.add_argument('-d', '--dur', default=300, type=float, help='simulation duration in seconds')
     parser.add_argument('--alpha',  default=0.5,  type=float, help='alpha parameter of the OU process')
     parser.add_argument('--mu',  default=0.0,  type=float, help='mu parameter of the OU process')
@@ -40,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument('-D', '--damping', default=0, type=int, help='damping coefficient')
     parser.add_argument('--DZA', default=0.036, type=float, help='deadband amplitude')
     parser.add_argument('-F', '--frequency', default=60, type=float, help='baseline frequency of the system')
-    parser.add_argument('-o', '--output',  default='ieee14.npz',  type=str, help='output file name')
+    parser.add_argument('-o', '--output',  default='ieee14.h5',  type=str, help='output file name')
     parser.add_argument('-s', '--seed',  default=None, type=int, help='seed of the random number generator')
     parser.add_argument('-f', '--force', action='store_true', help='force overwrite of output file')
     args = parser.parse_args(args=sys.argv[1:])
@@ -56,7 +57,11 @@ if __name__ == '__main__':
     if args.inertia <= 0:
         print('{}: the inertia value must be > 0'.format(progname))
         sys.exit(3)
-    
+
+    if not args.gen_id in generator_ids:
+        print('{}: generator id must be one of {}'.format(progname, generator_ids))
+        sys.exit(4)
+
     if args.seed is None:
         with open('/dev/random', 'rb') as fid:
             rng_seed = int.from_bytes(fid.read(4), 'little') % 1000000
@@ -84,8 +89,8 @@ if __name__ == '__main__':
                 'omegael06:noise', 'omegael08:noise']
     mem_vars.append('DevTime')
     for gen_id in generator_ids:
-        mem_vars.append('G{}:pe'.format(gen_id))
-        mem_vars.append('G{}:qe'.format(gen_id))
+        mem_vars.append(f'G{gen_id}:pe')
+        mem_vars.append(f'G{gen_id}:qe')
 
     disk_vars = ['^omega', '^G.*omega$']#, '^G[0-9]+[pq]$']
 
@@ -100,7 +105,7 @@ if __name__ == '__main__':
     pan.alter('Alfrand', 'FRAND', frand, annotate=1)
     pan.alter('Ald',     'D',     D,     annotate=1)
     pan.alter('Aldza',   'DZA',   DZA,   annotate=1)
-    pan.alter('Alh',     'm',     2 * H, instance='G1', annotate=1)
+    pan.alter('Alh',     'm',     2 * H, instance=f'G{args.gen_id}', annotate=1)
 
     np.random.seed(rng_seed)
     pan_seed = np.random.randint(low=0, high=1000000)
@@ -134,6 +139,7 @@ if __name__ == '__main__':
     params['DZA']      = DZA
     params['F0']       = args.frequency
     params['frand']    = frand
+    params['gen_id']   = args.gen_id
     params.append()
     tbl.flush()
 

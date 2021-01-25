@@ -1,4 +1,4 @@
-parameters TSTOP=7200 VDIG=1 LAMBDA=0 FRAND=10 D=0 F0=60 H_COEFF=1 
+parameters TSTOP=7200 VDIG=1 LAMBDA=0 FRAND=10 F0=60 H_COEFF=1 
 parameters PRAND=1M
 
 ; Synthetic inertia
@@ -13,12 +13,8 @@ parameter MAXDCGAIN=1M
     parameters SaveSet = ["agc02","drift14","omega*","pm","bus13"]
 #endif
 
-#ifdef DZ
-    ; increase by 10 fold
-    parameter DZA=36m/F0
-#else
-    parameter DZA=0.36/F0
-#endif
+parameter D=2 
+parameter DZA=60.0/F0
 
 options outintnodes=yes topcheck=2
 

@@ -1,5 +1,5 @@
 {
-    "data_dir": "data/IEEE14_D=2_DZA=0.036",
+    "data_dir": "data/var_H_G1/IEEE14_D=2_DZA=0.036",
     "var_names": ["omega_G1", "Pe_G1"],
     "model_arch": {
 	"N_dims": 1,

@@ -66,8 +66,8 @@ fi
 
 tmpfile="`tempfile`"
 
-cat $infile | tr -d '\b\r' > $tmpfile
-sed -i '/^  1\//d' $tmpfile
+tr -d '\b\r' < $infile > $tmpfile
+sed -i '/\.] - ETA:/d' $tmpfile
 if [ $outdir = $indir ] ; then
     mv $infile $infile.bak
 fi

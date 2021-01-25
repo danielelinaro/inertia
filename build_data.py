@@ -28,6 +28,7 @@ class Parameters (tables.IsDescription):
     DZA     = tables.Float64Col()
     F0      = tables.Float64Col()
     frand   = tables.Float64Col()
+    gen_id  = tables.Int32Col()
 
 
 if __name__ == '__main__':
@@ -161,9 +162,12 @@ if __name__ == '__main__':
     compression_filter = tables.Filters(complib='zlib', complevel=5)
     atom = tables.Float64Atom()
 
+    # generator whose inertia is varied
+    gen_inst = 'G{}'.format(config['gen_id'])
+
     for i in range(N_H):
 
-        pan.alter('Al', 'm', 2 * H[i], instance='G1', invalidate='false')
+        pan.alter('Al', 'm', 2 * H[i], instance=gen_inst, invalidate='false')
 
         out_file = '{}/H_{:.3f}{}.h5'.format(output_dir, H[i], suffix)
 
@@ -183,6 +187,7 @@ if __name__ == '__main__':
         params['DZA']     = DZA
         params['F0']      = F0
         params['frand']   = frand
+        params['gen_id']  = config['gen_id']
         params.append()
         tbl.flush()
         fid.create_array(fid.root, 'seeds', random_seeds[i,:])
