@@ -12,8 +12,23 @@ import tables
 
 import pypan.ui as pan
 
+__all__ = ['Parameters', 'generator_ids']
+
 progname = os.path.basename(sys.argv[0])
 generator_ids = (1,2,3,6,8)
+
+
+class Parameters (tables.IsDescription):
+    hw_seed = tables.Float64Col()
+    alpha   = tables.Float64Col()
+    mu      = tables.Float64Col()
+    c       = tables.Float64Col()
+    inertia = tables.Float64Col()
+    D       = tables.Float64Col()
+    DZA     = tables.Float64Col()
+    F0      = tables.Float64Col()
+    frand   = tables.Float64Col()
+
 
 if __name__ == '__main__':
 
@@ -145,17 +160,6 @@ if __name__ == '__main__':
 
     compression_filter = tables.Filters(complib='zlib', complevel=5)
     atom = tables.Float64Atom()
-
-    class Parameters (tables.IsDescription):
-        hw_seed = tables.Float64Col()
-        alpha   = tables.Float64Col()
-        mu      = tables.Float64Col()
-        c       = tables.Float64Col()
-        inertia = tables.Float64Col()
-        D       = tables.Float64Col()
-        DZA     = tables.Float64Col()
-        F0      = tables.Float64Col()
-        frand   = tables.Float64Col()
 
     for i in range(N_H):
 
