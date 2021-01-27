@@ -1,6 +1,6 @@
 {
-    "data_dir": "data/var_H_G1/IEEE14_D=2_DZA=0.036",
-    "var_names": ["omega_G1", "Pe_G1"],
+    "data_dir": "data/var_H_G2/IEEE14_D=2_DZA=60.0",
+    "var_names": ["omega_G2", "Pe_G2"],
     "model_arch": {
 	"N_dims": 1,
 	"N_units": {
@@ -9,7 +9,7 @@
 	    "dense": [64]
 	},
 	"preproc_activation": "relu",
-	"activation_loc": "after_pooling",
+	"activation_loc": "after_conv",
 	"kernel_size": [5, 5, 5],
 	"dropout_coeff": 0.0
     },

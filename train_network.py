@@ -22,18 +22,21 @@ print_warning = lambda msg: print(f'{cm.Fore.YELLOW}' + msg + f'{cm.Style.RESET_
 print_msg     = lambda msg: print(f'{cm.Fore.GREEN}'  + msg + f'{cm.Style.RESET_ALL}')
 
 
-def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, preproc_activation, activation_loc, input_name):
-    if activation_loc is not None and activation_loc not in ('after_pooling', 'after_conv'):
-        raise Exception('activation_loc must be one of "after_pooling" or "after_conv"')
-    if preproc_activation is not None and activation_loc not in ('relu',):
-        raise Exception(f'Unknown activation function {preproc_activation}')
+def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, activation_fun, activation_loc, input_name):
+    if activation_fun is not None:
+        if activation_fun.lower() not in ('relu',):
+            raise Exception(f'Unknown activation function {activation_fun}')
+        if activation_loc is None:
+            raise Exception(f'Must specify activation function location')
+        elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
+            raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
     inp = keras.Input(shape=(N_samples, 1), name=input_name)
     for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
         try:
             L = layers.Conv1D(N_conv, sz, activation=None)(L)
         except:
             L = layers.Conv1D(N_conv, sz, activation=None)(inp)
-        if preproc_activation is not None:
+        if activation_fun is not None:
             if activation_loc == 'after_conv':
                 L = layers.ReLU()(L)
                 L = layers.MaxPooling1D(N_pooling)(L)
@@ -45,18 +48,21 @@ def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, preproc_acti
     return inp,L
 
 
-def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, preproc_activation, activation_loc, input_name):
-    if activation_loc is not None and activation_loc not in ('after_pooling', 'after_conv'):
-        raise Exception('activation_loc must be one of "after_pooling" or "after_conv"')
-    if preproc_activation is not None and activation_loc not in ('relu',):
-        raise Exception(f'Unknown activation function {preproc_activation}')
+def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, activation_fun, activation_loc, input_name):
+    if activation_fun is not None:
+        if activation_fun.lower() not in ('relu',):
+            raise Exception(f'Unknown activation function {activation_fun}')
+        if activation_loc is None:
+            raise Exception(f'Must specify activation function location')
+        elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
+            raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
     inp = keras.Input(shape=(N_samples, 2, 1), name=input_name)
     for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
         try:
             L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(L)
         except:
             L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(inp)
-        if preproc_activation is not None:
+        if activation_fun is not None:
             if activation_loc == 'after_conv':
                 L = layers.ReLU()(L)
                 L = layers.MaxPooling2D([N_pooling, 1])(L)
@@ -118,36 +124,31 @@ def build_model(N_samples, var_names, model_arch, loss_fun_pars, optimizer_pars)
 
     N_units = model_arch['N_units']
     kernel_size = model_arch['kernel_size']
-    preproc_activation = model_arch['preproc_activation']
+    activation_fun = model_arch['preproc_activation']
+    activation_loc = model_arch['activation_loc']
 
     if N_dims == 1:
         inputs = []
-        outputs = []
+        L = []
         for var_name in var_names:
-            inp,outp = make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, preproc_activation, var_name)
+            inp,lyr = make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, \
+                                                     activation_fun, activation_loc, \
+                                                     var_name)
             inputs.append(inp)
-            outputs.append(outp)
+            L.append(lyr)
     else:
-        inputs,outp = make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, preproc_activation, '_'.join(var_names))
-        outpus = [outp]
+        inputs,L = make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, \
+                                                  activation_fun, activation_loc, \
+                                                  '_'.join(var_names))
 
-    if len(outputs) > 1:
-        concat = layers.concatenate(outputs)
-        flatten = layers.Flatten()(concat)
-    else:
-        flatten = layers.Flatten()(relus[0])
-
+    if isinstance(L, list):
+        L = layers.concatenate(L)
+    L = layers.Flatten()(L)
     for n in N_units['dense']:
-        try:
-            dense = layers.Dense(n, activation='relu')(dense)
-        except:
-            dense = layers.Dense(n, activation='relu')(flatten)
-
+        L = layers.Dense(n, activation='relu')(L)
     if model_arch['dropout_coeff'] > 0:
-        drop = layers.Dropout(model_arch['dropout_coeff'])(dense)
-        output = layers.Dense(y['training'].shape[1])(drop)
-    else:
-        output = layers.Dense(y['training'].shape[1])(dense)
+        L = layers.Dropout(model_arch['dropout_coeff'])(L)
+    output = layers.Dense(y['training'].shape[1])(L)
 
     model = keras.Model(inputs=inputs, outputs=output)
 
