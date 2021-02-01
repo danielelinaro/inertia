@@ -280,7 +280,7 @@ if __name__ == '__main__':
     if log_to_comet:
         ### create a CometML experiment
         experiment = Experiment(
-            api_key = os.environ['COMET_ML_API_KEY'],
+            api_key = os.environ['COMET_API_KEY'],
             project_name = 'inertia',
             workspace = 'danielelinaro'
         )
