@@ -288,22 +288,31 @@ if __name__ == '__main__':
     else:
         experiment_key = strftime('%Y%m%d-%H%M%S', localtime())
 
+    ### generator IDs
+    generator_IDs = config['generator_IDs']
+    n_generators = len(generator_IDs)
+
     ### load the data
-    data_folder = config['data_dir']
-    if not os.path.isdir(data_folder):
-        print_error('{}: {}: no such directory.'.format(progname, data_folder))
-        sys.exit(1)
+    data_folders = [data_dir.format(gen_id) for gen_id in generator_IDs for data_dir in config['data_dirs']]
+    for data_folder in data_folders:
+        if not os.path.isdir(data_folder):
+            print_error('{}: {}: no such directory.'.format(progname, data_folder))
+            sys.exit(1)
 
     inertia = {}
     for key in ('training', 'test', 'validation'):
         for ext in ('.h5', '.npz'):
             inertia[key] = np.sort([float(re.findall('[0-9]+\.[0-9]*', f)[-1]) \
-                                    for f in glob.glob(data_folder + '/*' + key + '*' + ext)])
+                                    for f in glob.glob(data_folders[0] + '/*' + key + '*' + ext)])
             if len(inertia[key]) > 0:
                 break
 
-    var_names = config['var_names']
-    time, x, y = load_data(data_folder, inertia, var_names)
+    var_names = [var_name.format(gen_id) for gen_id in generator_IDs for var_name in config['var_names']]
+    try:
+        max_block_size = config['max_block_size']
+    except:
+        max_block_size = np.inf
+    time, x, y = load_data(data_folders, generator_IDs, inertia, var_names, max_block_size)
     N_vars, N_training_traces, N_samples = x['training'].shape
 
     ### normalize the data
@@ -381,15 +390,16 @@ if __name__ == '__main__':
 
     ### compute the network prediction on the test set
     if len(model.inputs) == 1:
-        y_prediction = np.squeeze(best_model.predict(x['test']))
+        y_prediction = best_model.predict(x['test'])
     else:
-        y_prediction = np.squeeze(best_model.predict({var_name: x['test'][i] for i,var_name
-                                                      in enumerate(var_names)}))
+        y_prediction = best_model.predict({var_name: x['test'][i] for i,var_name
+                                                      in enumerate(var_names)})
 
     ### compute the mean absolute percentage error on the CNN prediction
     y_test = np.squeeze(y['test'].numpy())
-    mape_prediction = losses.mean_absolute_percentage_error(y_test, y_prediction).numpy()
-    print_msg('MAPE on CNN prediction ... {:.2f}%'.format(mape_prediction))
+    mape_prediction = losses.mean_absolute_percentage_error(y_test.T, y_prediction.T).numpy()
+    for generator_ID, mape in zip(generator_IDs, mape_prediction):
+        print(f'MAPE on CNN prediction for generator {generator_ID} ... {mape:.2f}%')
     test_results = {'y_test': y_test, 'y_prediction': y_prediction, 'mape_prediction': mape_prediction}
     
     best_model.save(output_path)
@@ -404,30 +414,35 @@ if __name__ == '__main__':
     ### plot a graph of the network topology
     keras.utils.plot_model(model, output_path + '/network_topology.pdf', show_shapes=True, dpi=300)
 
-    fig,(ax1,ax2) = plt.subplots(1, 2, figsize=(6,3))
+    fig,ax = plt.subplots(1, n_generators + 1, figsize=(3 + 3 * n_generators, 3))
     ### plot the loss as a function of the epoch number
     epochs = np.r_[0 : len(history.history['loss'])] + 1
-    ax1.plot(epochs, history.history['loss'], 'k', label='Training')
-    ax1.plot(epochs, history.history['val_loss'], 'r', label='Validation')
-    ax1.legend(loc='best')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
+    ax[0].plot(epochs, history.history['loss'], 'k', label='Training')
+    ax[0].plot(epochs, history.history['val_loss'], 'r', label='Validation')
+    ax[0].legend(loc='best')
+    ax[0].set_xlabel('Epoch')
+    ax[0].set_ylabel('Loss')
     ### plot the results obtained with the CNN
-    limits = np.squeeze(y['training'].numpy()[[0,-1]])
-    limits[1] += 1
-    ax2.plot(limits, limits, 'g--')
-    ax2.plot(y['test'], y_prediction, 'o', color=[1,.7,1], markersize=4, \
-             markerfacecolor='w', markeredgewidth=1)
-    for i in range(int(limits[0]), int(limits[1])):
-        idx,_ = np.where(np.abs(y['test'] - (i + 1/3)) < 1e-3)
-        m = np.mean(y_prediction[idx])
-        s = np.std(y_prediction[idx])
-        ax2.plot(i+1/3 + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
-        ax2.plot(i+1/3, m, 'ms', markersize=8, markerfacecolor='w', markeredgewidth=2)
-    ax2.set_title('CNN')
-    ax2.set_xlabel('Expected value')
-    ax2.set_ylabel('Predicted value')
-    ax2.axis([1.8, limits[1], 0, limits[1]])
+    block_size = y['test'].shape[0] // n_generators
+    y_max = np.max(y['training'], axis=0)
+    y_min = np.min(y['training'], axis=0)
+    for i in range(n_generators):
+        limits = [y_min[i], y_max[i]+1]
+        ax[i+1].plot(limits, limits, 'g--')
+        idx = np.arange(i * block_size, (i+1) * block_size)
+        ax[i+1].plot(y['test'][i * block_size : (i+1) * block_size, i], \
+                     y_prediction[i * block_size : (i+1) * block_size, i], 'o', \
+                     color=[1,.7,1], markersize=4, markerfacecolor='w', markeredgewidth=1)
+        for j in range(int(limits[0]), int(limits[1])):
+            idx, = np.where(np.abs(y['test'][i * block_size : (i+1) * block_size, i] - (j + 1/3)) < 1e-3)
+            m = np.mean(y_prediction[idx + i * block_size,i])
+            s = np.std(y_prediction[idx + i * block_size,i])
+            ax[i+1].plot(j+1/3 + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
+            ax[i+1].plot(j+1/3, m, 'ms', markersize=8, markerfacecolor='w', markeredgewidth=2)
+        ax[i+1].axis([1.8, limits[1], 1.8, limits[1]])
+        ax[i+1].set_xlabel('Expected value')
+        ax[i+1].set_title(f'Generator {generator_IDs[i]}')
+    ax[1].set_ylabel('Predicted value')
     fig.tight_layout()
     plt.savefig(output_path + '/summary.pdf')
 
