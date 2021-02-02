@@ -217,16 +217,24 @@ def train_model(model, x, y,
                        in learning_rate_schedule else patience / 10
             min_lr = learning_rate_schedule['min_learning_rate'] if 'min_learning_rate' \
                      in learning_rate_schedule else optimizer_lr / 1000
-            reduce_lr_cb = callbacks.ReduceLROnPlateau(monitor = 'val_loss',
-                                                       factor = factor,
-                                                       patience = patience,
-                                                       verbose = verbose,
-                                                       mode = 'min',
-                                                       cooldown = cooldown,
-                                                       min_lr = min_lr)
-            cbs.append(reduce_lr_cb)
+            lr_scheduler_cb = callbacks.ReduceLROnPlateau(monitor = 'val_loss',
+                                                          factor = factor,
+                                                          patience = patience,
+                                                          verbose = verbose,
+                                                          mode = 'min',
+                                                          cooldown = cooldown,
+                                                          min_lr = min_lr)
+            cbs.append(lr_scheduler_cb)
             print_msg('Added a callback for reducing learning rate on plateaus.')
 
+        elif learning_rate_schedule['name'] == 'exponential_decay':
+            initial_learning_rate = learning_rate_schedule['initial_learning_rate']
+            decay_steps = learning_rate_schedule['decay_steps'] if 'decay_steps' in learning_rate_schedule else 100000
+            decay_rate = learning_rate_schedule['decay_rate'] if 'decay_rate' in learning_rate_schedule else 0.96
+            schedule = optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps, decay_rate)
+            lr_scheduler_cb = callbacks.LearningRateScheduler(schedule, verbose)
+            cbs.append(lr_scheduler_cb)
+            print_msg('Added a callback for exponential decay of learning rate.')
         else:
             raise Exception('Unknown learning rate scheduling policy: {}'.format(learning_rate_schedule['name']))
 
@@ -345,8 +353,7 @@ if __name__ == '__main__':
         es_patience = None
         parameters['early_stopping_patience'] = None
 
-    if 'learning_rate_schedule' in config and \
-       config['learning_rate_schedule']['name'].lower() != 'none':
+    if 'learning_rate_schedule' in config and config['learning_rate_schedule']['name'] is not None:
         lr_schedule = config['learning_rate_schedule'][config['learning_rate_schedule']['name']]
         lr_schedule['name'] = config['learning_rate_schedule']['name']
     else:
