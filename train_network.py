@@ -22,6 +22,25 @@ print_warning = lambda msg: print(f'{cm.Fore.YELLOW}' + msg + f'{cm.Style.RESET_
 print_msg     = lambda msg: print(f'{cm.Fore.GREEN}'  + msg + f'{cm.Style.RESET_ALL}')
 
 
+LEARNING_RATE = []
+
+class LearningRateCallback(keras.callbacks.Callback):
+    def __init__(self, model, experiment = None):
+        self.model = model
+        self.experiment = experiment
+        self.step = 0
+
+    def on_train_batch_end(self, batch, logs=None):
+        self.step += 1
+        try:
+            lr = self.model.optimizer.learning_rate(self.step).numpy()
+        except:
+            lr = self.model.optimizer.learning_rate
+        LEARNING_RATE.append(lr)
+        if self.experiment is not None:
+            self.experiment.log_metric('learning_rate', lr, self.step)
+
+
 def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, activation_fun, activation_loc, input_name):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
@@ -74,7 +93,8 @@ def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, activation_f
     return inp,L
 
 
-def build_model(N_samples, var_names, model_arch, loss_fun_pars, optimizer_pars):
+def build_model(N_samples, steps_per_epoch, var_names, model_arch, \
+                loss_fun_pars, optimizer_pars, lr_schedule_pars):
     """
     Builds and compiles the model
     
@@ -97,7 +117,32 @@ def build_model(N_samples, var_names, model_arch, loss_fun_pars, optimizer_pars)
     else:
         raise Exception('Unknown loss function: {}.'.format(loss_function))
 
-    learning_rate = optimizer_pars['learning_rate']
+    if lr_schedule_pars is not None and 'name' in lr_schedule_pars:
+        if lr_schedule_pars['name'] == 'cyclical':
+            # According to [1], "experiments show that it often is good to set stepsize equal to
+            # 2 − 10 times the number of iterations in an epoch".
+            #
+            # [1] Smith, L.N., 2017, March.
+            #     Cyclical learning rates for training neural networks.
+            #     In 2017 IEEE Winter Conference on Applications of Computer Vision (WACV) (pp. 464-472). IEEE.
+            #
+            step_sz = steps_per_epoch * lr_schedule_pars['factor']
+            learning_rate = tfa.optimizers.Triangular2CyclicalLearningRate(
+                initial_learning_rate = lr_schedule_pars['initial_learning_rate'],
+                maximal_learning_rate = lr_schedule_pars['max_learning_rate'],
+                step_size = step_sz)
+            print_msg(f'Will use cyclical learning rate scheduling with a step size of {step_sz}.')
+        elif lr_schedule_pars['name'] == 'exponential_decay':
+            initial_learning_rate = lr_schedule_pars['initial_learning_rate']
+            decay_steps = lr_schedule_pars['decay_steps']
+            decay_rate = lr_schedule_pars['decay_rate']
+            learning_rate = optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps, decay_rate)
+            print_msg('Will use exponential decay of learning rate.')
+        else:
+            raise Exception(f'Unknown learning rate schedule: {lr_schedule_pars["name"]}')
+    else:
+        learning_rate = optimizer_pars['learning_rate']
+
     optimizer_name = optimizer_pars['name'].lower()
     if optimizer_name == 'sgd':
         momentum = optimizer_pars['momentum'] if 'momentum' in optimizer_pars else 0.
@@ -157,14 +202,13 @@ def build_model(N_samples, var_names, model_arch, loss_fun_pars, optimizer_pars)
     return model, optimizer, loss
 
 
-
 def train_model(model, x, y,
                 N_epochs,
                 batch_size,
                 steps_per_epoch,
                 output_dir,
-                early_stopping_patience = None,
-                learning_rate_schedule = None,
+                experiment = None,
+                callbacks_pars = None,
                 verbose = 1):
 
     checkpoint_dir = output_dir + '/checkpoints'
@@ -177,69 +221,35 @@ def train_model(model, x, y,
                                               save_best_only = True,
                                               monitor = 'val_loss',
                                               verbose = verbose)
-    cbs = [checkpoint_cb]
+    print_msg('Added callback for saving weights at checkpoint.')
 
-    if early_stopping_patience is not None:
-        # create a callback that will stop the optimization if there is no improvement
-        early_stop_cb = callbacks.EarlyStopping(monitor = 'val_loss',
-                                                patience = early_stopping_patience,
-                                                verbose = verbose,
-                                                mode = 'min')
-
-        cbs.append(early_stop_cb)
-        print_msg('Added a callback for early stopping.')
-    else:
-        print_warning('Not adding a callback for early stopping.')
+    cbs = [checkpoint_cb, LearningRateCallback(model, experiment)]
+    print_msg('Added callback for logging learning rate.')
 
     try:
-
-        if learning_rate_schedule['name'] == 'cyclical':
-            # According to [1], "experiments show that it often is good to set stepsize equal to
-            # 2 − 10 times the number of iterations in an epoch".
-            #
-            # [1] Smith, L.N., 2017, March.
-            #     Cyclical learning rates for training neural networks.
-            #     In 2017 IEEE Winter Conference on Applications of Computer Vision (WACV) (pp. 464-472). IEEE.
-            #
-            schedule = tfa.optimizers.Triangular2CyclicalLearningRate(
-                initial_learning_rate = learning_rate_schedule['initial_learning_rate'],
-                maximal_learning_rate = learning_rate_schedule['max_learning_rate'],
-                step_size = x['training'].shape[0] // batch_size * learning_rate_schedule['factor'])
-            lr_scheduler_cb = callbacks.LearningRateScheduler(schedule, verbose)
-            cbs.append(lr_scheduler_cb)
-            print_msg('Added a callback for cyclical learning rate scheduling.')
-
-        elif learning_rate_schedule['name'] == 'reduce_on_plateau':
-            optimizer_lr = model.optimizer.learning_rate.numpy()
-            factor = learning_rate_schedule['factor']
-            patience = learning_rate_schedule['patience']
-            cooldown = learning_rate_schedule['cooldown'] if 'cooldown' \
-                       in learning_rate_schedule else patience / 10
-            min_lr = learning_rate_schedule['min_learning_rate'] if 'min_learning_rate' \
-                     in learning_rate_schedule else optimizer_lr / 1000
-            lr_scheduler_cb = callbacks.ReduceLROnPlateau(monitor = 'val_loss',
-                                                          factor = factor,
-                                                          patience = patience,
-                                                          verbose = verbose,
-                                                          mode = 'min',
-                                                          cooldown = cooldown,
-                                                          min_lr = min_lr)
-            cbs.append(lr_scheduler_cb)
-            print_msg('Added a callback for reducing learning rate on plateaus.')
-
-        elif learning_rate_schedule['name'] == 'exponential_decay':
-            initial_learning_rate = learning_rate_schedule['initial_learning_rate']
-            decay_steps = learning_rate_schedule['decay_steps'] if 'decay_steps' in learning_rate_schedule else 100000
-            decay_rate = learning_rate_schedule['decay_rate'] if 'decay_rate' in learning_rate_schedule else 0.96
-            schedule = optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps, decay_rate)
-            lr_scheduler_cb = callbacks.LearningRateScheduler(schedule, verbose)
-            cbs.append(lr_scheduler_cb)
-            print_msg('Added a callback for exponential decay of learning rate.')
-        else:
-            raise Exception('Unknown learning rate scheduling policy: {}'.format(learning_rate_schedule['name']))
-
+        for cb_pars in callbacks_pars:
+            if cb_pars['name'] == 'early_stopping':
+                # create a callback that will stop the optimization if there is no improvement
+                early_stop_cb = callbacks.EarlyStopping(monitor = cb_pars['monitor'],
+                                                        patience = cb_pars['patience'],
+                                                        verbose = verbose,
+                                                        mode = cb_pars['mode'])
+                cbs.append(early_stop_cb)
+                print_msg('Added a callback for early stopping.')
+            elif cb_pars['name'] == 'reduce_on_plateau':
+                lr_scheduler_cb = callbacks.ReduceLROnPlateau(monitor = cb_pars['monitor'],
+                                                              factor = cb_pars['factor'],
+                                                              patience = cb_pars['patience'],
+                                                              verbose = verbose,
+                                                              mode = cb_pars['mode'],
+                                                              cooldown = cb_pars['cooldown'],
+                                                              min_lr = cb_pars['min_lr'])
+                cbs.append(lr_scheduler_cb)
+                print_msg('Added a callback for reducing learning rate on plateaus.')
+            else:
+                raise Exception(f'Unknown callback: {cb_pars["name"]}')
     except:
-        print_warning('Not adding a callback for learning rate scheduling.')
+        print_warning('Not adding callbacks.')
 
     if len(model.inputs) == 1:
         x_training = x['training']
@@ -294,6 +304,7 @@ if __name__ == '__main__':
         )
         experiment_key = experiment.get_key()
     else:
+        experiment = None
         experiment_key = strftime('%Y%m%d-%H%M%S', localtime())
 
     ### generator IDs
@@ -329,15 +340,11 @@ if __name__ == '__main__':
     for key in x:
         x[key] = tf.constant([(x[key][i].numpy() - m) / s for i,(m,s) in enumerate(zip(x_train_mean, x_train_std))])
 
-    ### build the network
-    optimizer_pars = config['optimizer'][config['optimizer']['name']]
-    optimizer_pars['name'] = config['optimizer']['name']
-    model, optimizer, loss = build_model(N_samples,
-                                         var_names,
-                                         config['model_arch'],
-                                         config['loss_function'],
-                                         optimizer_pars)
-    model.summary()
+    if 'learning_rate_schedule' in config and config['learning_rate_schedule']['name'] is not None:
+        lr_schedule = config['learning_rate_schedule'][config['learning_rate_schedule']['name']]
+        lr_schedule['name'] = config['learning_rate_schedule']['name']
+    else:
+        lr_schedule = None
 
     ### store all the parameters
     parameters = config.copy()
@@ -346,28 +353,27 @@ if __name__ == '__main__':
     parameters['N_samples'] = N_samples
     parameters['x_train_mean'] = x_train_mean
     parameters['x_train_std'] = x_train_std
-    
-    try:
-        es_patience = config['early_stopping_patience']
-    except:
-        es_patience = None
-        parameters['early_stopping_patience'] = None
-
-    if 'learning_rate_schedule' in config and config['learning_rate_schedule']['name'] is not None:
-        lr_schedule = config['learning_rate_schedule'][config['learning_rate_schedule']['name']]
-        lr_schedule['name'] = config['learning_rate_schedule']['name']
-    else:
-        lr_schedule = None
-        parameters['learning_rate_schedule'] = None
-
     N_epochs = config['N_epochs']
     batch_size = config['batch_size']
-    N_batches = np.ceil(N_training_traces / batch_size)
-    parameters['N_batches'] = N_batches
-    steps_per_epoch = np.max([N_batches, 100])
+    steps_per_epoch = N_training_traces // batch_size
     parameters['steps_per_epoch'] = steps_per_epoch
     output_path = args.output_dir + '/' + experiment_key
     parameters['output_path'] = output_path
+    print(f'Number of training traces: {N_training_traces}')
+    print(f'Batch size:                {batch_size}')
+    print(f'Steps per epoch:           {steps_per_epoch}')
+
+    ### build the network
+    optimizer_pars = config['optimizer'][config['optimizer']['name']]
+    optimizer_pars['name'] = config['optimizer']['name']
+    model, optimizer, loss = build_model(N_samples,
+                                         steps_per_epoch,
+                                         var_names,
+                                         config['model_arch'],
+                                         config['loss_function'],
+                                         optimizer_pars,
+                                         lr_schedule)
+    model.summary()
 
     if log_to_comet:
         experiment.log_parameters(parameters)
@@ -377,14 +383,22 @@ if __name__ == '__main__':
         for key in x:
             x[key] = tf.transpose(x[key], perm=(1,2,0))
 
+    try:
+        cb_pars = []
+        for name in config['callbacks']['names']:
+            cb_pars.append(config['callbacks'][name])
+            cb_pars[-1]['name'] = name
+    except:
+        cb_pars = None
+
     ### train the network
     history = train_model(model, x, y,
                           N_epochs,
                           batch_size,
                           steps_per_epoch,
                           output_path,
-                          es_patience,
-                          lr_schedule,
+                          experiment,
+                          cb_pars,
                           verbose = 1)
 
     checkpoint_path = output_path + '/checkpoints'
@@ -414,42 +428,56 @@ if __name__ == '__main__':
     pickle.dump(test_results, open(output_path + '/test_results.pkl', 'wb'))
     pickle.dump(history.history, open(output_path + '/history.pkl', 'wb'))
 
+    ### plot a graph of the network topology
+    keras.utils.plot_model(model, output_path + '/network_topology.png', show_shapes=True, dpi=300)
+
     if log_to_comet:
         experiment.log_metric('mape_prediction', mape_prediction)
         experiment.log_model('best_model', output_path + '/saved_model.pb')
+        experiment.log_image(output_path + '/network_topology.png', 'network_topology')
 
-    ### plot a graph of the network topology
-    keras.utils.plot_model(model, output_path + '/network_topology.pdf', show_shapes=True, dpi=300)
 
-    fig,ax = plt.subplots(1, n_generators + 1, figsize=(3 + 3 * n_generators, 3))
+    ### plot a summary figure
+    cols = n_generators + 2
+    fig,ax = plt.subplots(1, cols, figsize=(3 * cols, 3))
     ### plot the loss as a function of the epoch number
     epochs = np.r_[0 : len(history.history['loss'])] + 1
-    ax[0].plot(epochs, history.history['loss'], 'k', label='Training')
-    ax[0].plot(epochs, history.history['val_loss'], 'r', label='Validation')
+    ax[0].plot(epochs, history.history['loss'], 'k', lw=1, label='Training')
+    ax[0].plot(epochs, history.history['val_loss'], 'r', lw=1, label='Validation')
     ax[0].legend(loc='best')
     ax[0].set_xlabel('Epoch')
     ax[0].set_ylabel('Loss')
+    ### plot the learning rate as a function of the epoch number
+    steps = np.r_[0 : len(LEARNING_RATE)] + 1
+    ax[1].semilogy(steps / steps_per_epoch, LEARNING_RATE, 'k', lw=1)
+    ax[1].set_xlabel('Epoch')
+    ax[1].set_ylabel('Learning rate')
     ### plot the results obtained with the CNN
     block_size = y['test'].shape[0] // n_generators
     y_max = np.max(y['training'], axis=0)
     y_min = np.min(y['training'], axis=0)
     for i in range(n_generators):
         limits = [y_min[i], y_max[i]+1]
-        ax[i+1].plot(limits, limits, 'g--')
+        ax[i+2].plot(limits, limits, 'g--')
         idx = np.arange(i * block_size, (i+1) * block_size)
-        ax[i+1].plot(y['test'][i * block_size : (i+1) * block_size, i], \
+        ax[i+2].plot(y['test'][i * block_size : (i+1) * block_size, i], \
                      y_prediction[i * block_size : (i+1) * block_size, i], 'o', \
                      color=[1,.7,1], markersize=4, markerfacecolor='w', markeredgewidth=1)
         for j in range(int(limits[0]), int(limits[1])):
             idx, = np.where(np.abs(y['test'][i * block_size : (i+1) * block_size, i] - (j + 1/3)) < 1e-3)
             m = np.mean(y_prediction[idx + i * block_size,i])
             s = np.std(y_prediction[idx + i * block_size,i])
-            ax[i+1].plot(j+1/3 + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
-            ax[i+1].plot(j+1/3, m, 'ms', markersize=8, markerfacecolor='w', markeredgewidth=2)
-        ax[i+1].axis([1.8, limits[1], 1.8, limits[1]])
-        ax[i+1].set_xlabel('Expected value')
-        ax[i+1].set_title(f'Generator {generator_IDs[i]}')
-    ax[1].set_ylabel('Predicted value')
+            ax[i+2].plot(j+1/3 + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
+            ax[i+2].plot(j+1/3, m, 'ms', markersize=6, markerfacecolor='w', markeredgewidth=2)
+        ax[i+2].axis([1.8, limits[1], 1.8, limits[1]])
+        ax[i+2].set_xlabel('Expected value')
+        ax[i+2].set_title(f'Generator {generator_IDs[i]}')
+    ax[2].set_ylabel('Predicted value')
+    for a in ax:
+        for side in 'right','top':
+            a.spines[side].set_visible(False)
     fig.tight_layout()
+    if log_to_comet:
+        experiment.log_figure('summary', fig)
     plt.savefig(output_path + '/summary.pdf')
 
