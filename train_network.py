@@ -235,7 +235,7 @@ def train_model(model, x, y,
                                                         verbose = verbose,
                                                         mode = cb_pars['mode'])
                 cbs.append(early_stop_cb)
-                print_msg('Added a callback for early stopping.')
+                print_msg('Added callback for early stopping.')
             elif cb_pars['name'] == 'reduce_on_plateau':
                 lr_scheduler_cb = callbacks.ReduceLROnPlateau(monitor = cb_pars['monitor'],
                                                               factor = cb_pars['factor'],
@@ -245,7 +245,7 @@ def train_model(model, x, y,
                                                               cooldown = cb_pars['cooldown'],
                                                               min_lr = cb_pars['min_lr'])
                 cbs.append(lr_scheduler_cb)
-                print_msg('Added a callback for reducing learning rate on plateaus.')
+                print_msg('Added callback for reducing learning rate on plateaus.')
             else:
                 raise Exception(f'Unknown callback: {cb_pars["name"]}')
     except:
