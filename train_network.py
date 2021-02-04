@@ -309,7 +309,7 @@ if __name__ == '__main__':
 
     ### generator IDs
     generator_IDs = config['generator_IDs']
-    n_generators = len(generator_IDs)
+    N_generators = len(generator_IDs)
 
     ### load the data
     data_folders = [data_dir.format(gen_id) for gen_id in generator_IDs for data_dir in config['data_dirs']]
@@ -357,7 +357,7 @@ if __name__ == '__main__':
     batch_size = config['batch_size']
     steps_per_epoch = N_training_traces // batch_size
     parameters['steps_per_epoch'] = steps_per_epoch
-    output_path = args.output_dir + '/' + experiment_key
+    output_path = args.output_dir + '/neural_network/' + experiment_key
     parameters['output_path'] = output_path
     print(f'Number of training traces: {N_training_traces}')
     print(f'Batch size:                {batch_size}')
@@ -390,6 +390,25 @@ if __name__ == '__main__':
             cb_pars[-1]['name'] = name
     except:
         cb_pars = None
+
+    if log_to_comet:
+        # add a bunch of tags to the experiment
+        experiment.add_tag('neural_network')
+        experiment.add_tag(str(config['model_arch']['N_dims']) + 'D_pipeline')
+        experiment.add_tag('_'.join([f'G{gen_id}' for gen_id in config['generator_IDs']]))
+        D = int(re.findall('D=\d', config['data_dirs'][0])[0].split('=')[1])
+        DZA = float(re.findall('DZA=\d+.\d+', config['data_dirs'][0])[0].split('=')[1])
+        experiment.add_tag(f'DZA={DZA:g}')
+        experiment.add_tag(f'D={D:d}')
+        try:
+            experiment.add_tag(config['learning_rate_schedule']['name'].split('_')[0] + '_lr')
+        except:
+            pass
+        if config['model_arch']['preproc_activation'] is None:
+            experiment.add_tag('ReLU_none')
+        else:
+            experiment.add_tag(config['model_arch']['preproc_activation'] + '_' + \
+                               config['model_arch']['activation_loc'])
 
     ### train the network
     history = train_model(model, x, y,
@@ -438,7 +457,7 @@ if __name__ == '__main__':
 
 
     ### plot a summary figure
-    cols = n_generators + 2
+    cols = N_generators + 2
     fig,ax = plt.subplots(1, cols, figsize=(3 * cols, 3))
     ### plot the loss as a function of the epoch number
     epochs = np.r_[0 : len(history.history['loss'])] + 1
@@ -453,22 +472,21 @@ if __name__ == '__main__':
     ax[1].set_xlabel('Epoch')
     ax[1].set_ylabel('Learning rate')
     ### plot the results obtained with the CNN
-    block_size = y['test'].shape[0] // n_generators
+    block_size = y['test'].shape[0] // N_generators
     y_max = np.max(y['training'], axis=0)
     y_min = np.min(y['training'], axis=0)
-    for i in range(n_generators):
+    for i in range(N_generators):
         limits = [y_min[i], y_max[i]+1]
         ax[i+2].plot(limits, limits, 'g--')
-        idx = np.arange(i * block_size, (i+1) * block_size)
         ax[i+2].plot(y['test'][i * block_size : (i+1) * block_size, i], \
                      y_prediction[i * block_size : (i+1) * block_size, i], 'o', \
                      color=[1,.7,1], markersize=4, markerfacecolor='w', markeredgewidth=1)
         for j in range(int(limits[0]), int(limits[1])):
             idx, = np.where(np.abs(y['test'][i * block_size : (i+1) * block_size, i] - (j + 1/3)) < 1e-3)
-            m = np.mean(y_prediction[idx + i * block_size,i])
-            s = np.std(y_prediction[idx + i * block_size,i])
-            ax[i+2].plot(j+1/3 + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
-            ax[i+2].plot(j+1/3, m, 'ms', markersize=6, markerfacecolor='w', markeredgewidth=2)
+            m = np.mean(y_prediction[idx + i * block_size, i])
+            s = np.std(y_prediction[idx + i * block_size, i])
+            ax[i+2].plot(j + 1/3 + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
+            ax[i+2].plot(j + 1/3, m, 'ms', markersize=6, markerfacecolor='w', markeredgewidth=2)
         ax[i+2].axis([1.8, limits[1], 1.8, limits[1]])
         ax[i+2].set_xlabel('Expected value')
         ax[i+2].set_title(f'Generator {generator_IDs[i]}')

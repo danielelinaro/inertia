@@ -3,7 +3,6 @@ import os
 import re
 import tables
 import numpy as np
-import tensorflow as tf
 
 
 __all__ = ['load_one_block', 'load_data', 'slide_window']
@@ -18,13 +17,14 @@ default_H = {
     }
 }
 
-def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, verbose = False):
+def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, dtype = np.float32):
     """
     This function loads a single data file containing the results of the simulations for one value of inertia
     """
     ext = os.path.splitext(filename)[1]
 
     fid = tables.open_file(filename, 'r')
+    # do not convert time to dtype here because that gives problems when computing n_samples below
     time = fid.root.time.read()
     X = [fid.root[var_name].read(stop=np.min([fid.root[var_name].shape[0], max_num_rows])) for var_name in var_names]
     pars = fid.root.parameters.read()
@@ -36,18 +36,16 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, v
     n_samples = int(trial_dur / dt)
     n_trials = int(orig_n_trials * orig_n_samples / n_samples)
     time = time[:n_samples]
-    X = [np.reshape(x, [n_trials, n_samples], order='C') for x in X]
+    X = np.array([np.reshape(x, [n_trials, n_samples], order='C') for x in X], dtype=dtype)
 
-    if verbose:
-        print('There are {} trials, each of which contains {} samples.'.\
-              format(n_trials, n_samples))
-
-    return tf.constant(time, dtype=tf.float32), \
-           tf.constant(X, dtype=tf.float32), \
-           tf.constant([inertia for _ in range(n_trials)], shape=(n_trials,1), dtype=tf.float32)
+    return time.astype(dtype), X, inertia
 
 
-def load_data(folders, generator_IDs, inertia_values, var_names, max_block_size = np.inf):
+def load_data(folders, generator_IDs, inertia_values, var_names, max_block_size = np.inf, dtype = np.float32, use_tf = True):
+    # Note: dtype should be a NumPy type, even if use_tf = True
+    if use_tf:
+        import tensorflow as tf
+
     X = {}
     Y = {}
     if isinstance(inertia_values, dict):
@@ -61,20 +59,23 @@ def load_data(folders, generator_IDs, inertia_values, var_names, max_block_size 
         for key,H in inertia.items():
             for h in H:
                 filename = folder + 'H_{:.3f}_{}_set.h5'.format(h, key)
-                time, x, y_tmp = load_one_block(filename, var_names, 60, max_block_size)
-                y_tmp = np.squeeze(y_tmp.numpy())
-                y = np.zeros([y_tmp.size, n_outputs])
-                y[:,i] = y_tmp
+                time, x, _ = load_one_block(filename, var_names, 60, max_block_size, dtype)
+                y = np.zeros((x.shape[-2], n_outputs), dtype=dtype)
+                y[:,i] = h
                 for j in range(n_outputs):
                     if j != i:
                         y[:,j] = default_H['IEEE14'][generator_IDs[j]]
-                y = tf.constant(y)
                 try:
-                    X[key] = tf.concat([X[key], x], axis=1)
-                    Y[key] = tf.concat([Y[key], y], axis=0)
+                    X[key] = np.concatenate((X[key], x), axis=1)
+                    Y[key] = np.concatenate((Y[key], y), axis=0)
                 except:
                     X[key] = x
                     Y[key] = y
+    if use_tf:
+        time = tf.constant(time, dtype=tf.dtypes.as_dtype(dtype))
+        for key in X:
+            X[key] = tf.constant(X[key], dtype=tf.dtypes.as_dtype(dtype))
+            Y[key] = tf.constant(Y[key], dtype=tf.dtypes.as_dtype(dtype))
     return time, X, Y
 
             

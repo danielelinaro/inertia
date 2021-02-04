@@ -1,0 +1,10 @@
+{
+    "generator_IDs": [1],
+    "data_dirs": ["data/var_H_G{}/IEEE14_D=2_DZA=60.0"],
+    "var_names": ["omega_G{}", "Pe_G{}"],
+    "max_block_size": 1000,
+    "n_estimators": 50,
+    "criterion": "mae",
+    "max_depth": null,
+    "n_jobs": 4
+}
