@@ -66,13 +66,6 @@ if __name__ == '__main__':
     else:
         tstop = config['dur']
 
-    if args.with_power:
-        with_power = True
-    elif 'with_power' in config:
-        with_power = config['with_power']
-    else:
-        with_power = False
-
     # inertia values
     H_min = config['Hmin']
     H_max = config['Hmax']
@@ -124,17 +117,10 @@ if __name__ == '__main__':
     pan.alter('Ald',     'D',     D,     annotate=1)
     pan.alter('Aldza',   'DZA',   DZA,   annotate=1)
 
-    disk_vars = ['omega*']
-    mem_vars = ['time:noise', 'omega01:noise', 'omega02:noise', 'G3:omega:noise', \
-                'G6:omega:noise', 'G8:omega:noise', 'omegacoi:noise', \
-                'omegael01:noise', 'omegael02:noise', 'omegael03:noise', \
-                'omegael06:noise', 'omegael08:noise']
-
-    if with_power:
-        mem_vars.append('DevTime')
-        for gen_id in generator_ids:
-            mem_vars.append('G{}:pe'.format(gen_id))
-            mem_vars.append('G{}:qe'.format(gen_id))
+    mem_vars_map = config['mem_vars']
+    mem_vars = list(mem_vars_map.keys())
+    time_mem_var = mem_vars[['time' in mem_var for mem_var in mem_vars].index(True)]
+    time_disk_var = mem_vars_map[time_mem_var]
 
     if args.output_dir is None:
         from time import strftime, localtime
@@ -142,10 +128,8 @@ if __name__ == '__main__':
     else:
         output_dir = args.output_dir
 
-    try:
+    if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
-    except:
-        pass
 
     if not os.path.isfile(output_dir + '/' + os.path.basename(config_file)):
         config['dur'] = tstop
@@ -190,17 +174,15 @@ if __name__ == '__main__':
         params['gen_id']  = config['gen_id']
         params.append()
         tbl.flush()
+
         fid.create_array(fid.root, 'seeds', random_seeds[i,:])
         fid.create_earray(fid.root, 'noise', atom, (0, N_samples))
-        fid.create_earray(fid.root, 'omega_coi', atom, (0, N_samples-1))
-        for gen_id in generator_ids:
-            gen = 'G{}'.format(gen_id)
-            for lbl in ('omega_', 'omegael_', 'Pe_', 'Qe_'):
-                key = lbl + gen
-                if lbl not in ('Pe_','Qe_'):
-                    fid.create_earray(fid.root, key, atom, (0, N_samples-1))
-                elif with_power:
-                    fid.create_earray(fid.root, key, atom, (0, N_samples-1))
+        for disk_var in mem_vars_map.values():
+            if disk_var is not None:
+                if isinstance(disk_var, str) and disk_var != time_disk_var:
+                    fid.create_earray(fid.root, disk_var, atom, (0, N_samples-1))
+                elif isinstance(disk_var, list):
+                    fid.create_earray(fid.root, disk_var[0], atom, (0, N_samples-1))
         # close the file so that other programs can read it
         fid.close()
 
@@ -216,8 +198,7 @@ if __name__ == '__main__':
             # run a transient analysis
             data = pan.tran('Tr', tstop, mem_vars, nettype=1, method=2, maxord=2, \
                             noisefmax=frand/2, noiseinj=2, seed=random_seeds[i,j], \
-                            iabstol=1e-6, devvars=1, tmax=0.1, annotate=1, \
-                            savelist='["' + '","'.join(disk_vars) + '"]')
+                            iabstol=1e-6, devvars=1, tmax=0.1, annotate=1)
 
             # save the results to file
             get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]
@@ -225,44 +206,31 @@ if __name__ == '__main__':
             fid = tables.open_file(out_file, 'a')
 
             fid.root.noise.append(noise_samples[1, np.newaxis, :])
-            fid.root.omega_coi.append(get_var(data, mem_vars, 'omegacoi:noise')[np.newaxis,:])
 
             if j == 0:
-                time = get_var(data, mem_vars, 'time:noise')
-                fid.create_array(fid.root, 'time', time)
+                time = get_var(data, mem_vars, time_mem_var)
+                fid.create_array(fid.root, time_disk_var, time)
 
-            for gen_id in (1,2):
-                gen = 'G{}'.format(gen_id)
-                key = 'omega_' + gen
-                fid.root[key].append(get_var(data, mem_vars, 'omega{:02d}:noise'.format(gen_id))[np.newaxis,:])
-
-            for gen_id in (3,6,8):
-                gen = 'G{}'.format(gen_id)
-                key = 'omega_' + gen
-                fid.root[key].append(get_var(data, mem_vars, 'G{}:omega:noise'.format(gen_id))[np.newaxis,:])
-
-            for gen_id in generator_ids:
-                # the electrical omega in PAN has zero mean, so it needs to
-                # be shifted at 1 p.u.
-                key = 'omegael_G{}'.format(gen_id)
-                fid.root[key].append(1.0 + get_var(data, mem_vars, 'omegael{:02d}:noise'.format(gen_id))[np.newaxis,:])
-
-            if with_power:
-                dev_time = get_var(data, mem_vars, 'DevTime')
-                try:
-                    idx = np.array([np.where(dev_time == tt)[0][0] for tt in time])
-                    is_subset = True
-                except:
-                    is_subset = False
-                for gen_id in generator_ids:
-                    for lbl in ('p','q'):
-                        var = get_var(data, mem_vars, 'G{}:{}e'.format(gen_id, lbl))
-                        key = '{}e_G{}'.format(lbl.upper(), gen_id)
-                        if is_subset:
-                            fid.root[key].append(var[np.newaxis,idx])
-                        else:
-                            f = interp1d(dev_time, var)
-                            fid.root[key].append(f(time)[np.newaxis,:])
+            for k,mem_var in enumerate(mem_vars):
+                disk_var = mem_vars_map[mem_var]
+                if 'omegael' in mem_var:
+                    offset = 1.
+                else:
+                    offset = 0.
+                if disk_var is not None:
+                    if isinstance(disk_var, str) and disk_var != time_disk_var:
+                        fid.root[disk_var].append(data[k][np.newaxis, :] + offset)
+                    elif isinstance(disk_var, list):
+                        disk_var, orig_time_var, resampled_time_var = disk_var
+                        var = get_var(data, mem_vars, mem_var)
+                        orig_time = get_var(data, mem_vars, orig_time_var)
+                        resampled_time = get_var(data, mem_vars, resampled_time_var)
+                        try:
+                            idx = np.array([np.where(origin_time == tt)[0][0] for tt in resampled_time])
+                            fid.root[disk_var].append(var[np.newaxis, idx] + offset)
+                        except:
+                            f = interp1d(orig_time, var)
+                            fid.root[disk_var].append(f(resampled_time)[np.newaxis, :] + offset)
 
             fid.close()
 

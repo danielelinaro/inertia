@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function usage {
-    echo "usage: ${progname} [-Hmin hmin] [-Hmax hmax] [-G gen_id] [-D damping] [-DZA dead-band width] [-f | --force]"
+    echo "usage: ${progname} [-Hmin hmin] [-Hmax hmax] [-G gen_id] [-D damping] [-DZA dead-band width] [-f | --force] pan_file"
 }
 
 progname=`basename $0`
@@ -49,15 +49,33 @@ while [[ $# -gt 0 ]] ; do
 	    shift
 	    ;;
 	*)
-	    echo "unknown option: ${key}"
-	    usage
-	    exit 1
+	    if [ -f "${key}" ] ; then
+		panfile="${key}"
+	    else
+		echo "unknown option: ${key}"
+		usage
+		exit 1
+	    fi
+	    shift
 	    ;;
     esac
 done
 
-output_dir="in_progress/IEEE14_D=${D}_DZA=${DZA}"
-config_template="config/build_data_config_template.json"
+if [ -z "$panfile" ] ; then
+    usage
+    exit 1
+fi
+
+if [ "$(basename $panfile)" = "ieee14.pan" ] ; then
+    prefix="IEEE14"
+elif [ "$(basename $panfile)" = "two-area.pan" ] ; then
+    prefix="TWO_AREA"
+else
+    prefix=""
+fi
+
+output_dir="in_progress/${prefix}_D=${D}_DZA=${DZA}"
+config_template="config/build_data_config_template_${prefix}.json"
 training_config=$(mktemp --suffix "_training_config.json")
 test_config=$(mktemp --suffix "_test_config.json")
 validation_config=$(mktemp --suffix "_validation_config.json")
@@ -68,7 +86,7 @@ if [ -d $output_dir ] && [ "$force" = "no" ] ; then
 fi
 
 sed -e 's/{HMIN}/'$Hmin'/' -e 's/{HMAX}/'$Hmax'/' -e 's/{D}/'$D'/' -e 's/{GEN_ID}/'$generator'/' \
-    -e 's/{DZA}/'$DZA'/' -e 's/{N}/3000/' ${config_template} > ${training_config}
+    -e 's/{DZA}/'$DZA'/' -e 's/{N}/1000/' ${config_template} > ${training_config}
 
 Hmin=`echo $Hmin+0.333333 | bc`
 Hmax=`echo $Hmax+0.333333 | bc`
