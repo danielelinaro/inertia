@@ -3,8 +3,8 @@
     "data_dirs": ["data/var_H_G{}/IEEE14_D=2_DZA=60.0"],
     "var_names": ["omega_G{}", "Pe_G{}"],
     "max_block_size": 1000,
-    "n_estimators": 50,
+    "n_estimators": 10,
     "criterion": "mae",
     "max_depth": null,
-    "n_jobs": 4
+    "n_jobs": -1
 }

@@ -104,7 +104,7 @@ if __name__ == '__main__':
     ### reshape the data to agree with the forest inputs to the "fit" method
     for key in x:
         tmp = np.transpose(x[key], axes=(1,2,0))
-        x[key] = np.reshape(tmp, [N_training_traces, N_samples * N_vars], order='F')
+        x[key] = np.reshape(tmp, [tmp.shape[0], N_samples * N_vars], order='F')
         y[key] = np.squeeze(y[key])
 
     if log_to_comet:
@@ -121,8 +121,9 @@ if __name__ == '__main__':
                                    criterion = config['criterion'].lower(),
                                    max_depth = config['max_depth'],
                                    random_state = rnd_state,
-                                   n_jobs = config['n_jobs'] if 'n_jobs' in config else 1,
-                                   verbose = 1)
+                                   n_jobs = config['n_jobs'] if 'n_jobs' in config else 2,
+                                   warm_start = True,
+                                   verbose = 3)
 
     ### train the forest
     forest.fit(x['training'], y['training'])
@@ -143,7 +144,8 @@ if __name__ == '__main__':
     test_results = {'y_test': y['test'], 'y_prediction': y['prediction'], 'mape_prediction': mape_prediction}
 
     os.makedirs(output_path)
-    
+
+    pickle.dump(forest, open(output_path + '/forest.pkl', 'wb'))
     pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
     pickle.dump(forest_params, open(output_path + '/forest_parameters.pkl', 'wb'))
     pickle.dump(test_results, open(output_path + '/test_results.pkl', 'wb'))
