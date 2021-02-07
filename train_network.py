@@ -394,6 +394,10 @@ if __name__ == '__main__':
     if log_to_comet:
         # add a bunch of tags to the experiment
         experiment.add_tag('neural_network')
+        if 'IEEE14' in config['data_dirs'][0]:
+            experiment.add_tag('IEEE14')
+        elif 'two-area' in config['data_dirs'][0]:
+            experiment.add_tag('two-area')
         experiment.add_tag(str(config['model_arch']['N_dims']) + 'D_pipeline')
         experiment.add_tag('_'.join([f'G{gen_id}' for gen_id in config['generator_IDs']]))
         D = int(re.findall('D=\d', config['data_dirs'][0])[0].split('=')[1])
