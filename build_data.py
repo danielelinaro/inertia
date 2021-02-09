@@ -12,23 +12,21 @@ import tables
 
 import pypan.ui as pan
 
-__all__ = ['Parameters', 'generator_ids']
+__all__ = ['BaseParameters', 'generator_ids']
 
 progname = os.path.basename(sys.argv[0])
-generator_ids = (1,2,3,6,8)
+generator_ids = {'IEEE14': (1,2,3,6,8), 'two-area': (1,2,3,4)}
 
 
-class Parameters (tables.IsDescription):
+class BaseParameters (tables.IsDescription):
     hw_seed = tables.Float64Col()
     alpha   = tables.Float64Col()
     mu      = tables.Float64Col()
     c       = tables.Float64Col()
-    inertia = tables.Float64Col()
     D       = tables.Float64Col()
     DZA     = tables.Float64Col()
     F0      = tables.Float64Col()
     frand   = tables.Float64Col()
-    gen_id  = tables.Int32Col()
 
 
 if __name__ == '__main__':
@@ -66,12 +64,20 @@ if __name__ == '__main__':
     else:
         tstop = config['dur']
 
+    # generator IDs
+    generator_IDs = config['generator_IDs']
+    N_generators = len(generator_IDs)
+
     # inertia values
-    H_min = config['Hmin']
-    H_max = config['Hmax']
-    dH = config['Hstep']
-    H = np.r_[H_min : H_max + dH/2 : dH]
-    N_H = H.size
+    inertia = config['inertia']
+    inertia_values = []
+    for gen_id in generator_IDs:
+        inertia_values.append(inertia[gen_id])
+    H = np.meshgrid(*inertia_values)
+    inertia_values = {}
+    for i,gen_id in enumerate(generator_IDs):
+        inertia_values[gen_id] = H[i].flatten()
+    N_inertia = inertia_values[generator_IDs[0]].size
 
     # how many trials per inertia value
     if args.n_trials is not None:
@@ -79,7 +85,7 @@ if __name__ == '__main__':
     else:
         N_trials = config['Ntrials']
 
-    random_seeds = np.random.randint(low=0, high=1000000, size=(N_H, N_trials))
+    random_seeds = np.random.randint(low=0, high=1000000, size=(N_inertia, N_trials))
 
     dt = 1 / frand
     t = dt + np.r_[0 : tstop + dt/2 : dt]
@@ -146,14 +152,17 @@ if __name__ == '__main__':
     compression_filter = tables.Filters(complib='zlib', complevel=5)
     atom = tables.Float64Atom()
 
-    # generator whose inertia is varied
-    gen_inst = 'G{}'.format(config['gen_id'])
+    class Parameters (BaseParameters):
+        generator_IDs  = tables.StringCol(8, shape=(N_generators,))
+        inertia = tables.Float64Col(shape=(N_generators,))
 
-    for i in range(N_H):
+    for i in range(N_inertia):
 
-        pan.alter('Al', 'm', 2 * H[i], instance=gen_inst, invalidate='false')
-
-        out_file = '{}/H_{:.3f}{}.h5'.format(output_dir, H[i], suffix)
+        out_file = ''
+        for gen_id in generator_IDs:
+            pan.alter('Al', 'm', 2 * inertia_values[gen_id][i], instance=gen_id, invalidate='false')
+            out_file += f'_{inertia_values[gen_id][i]:.3f}'
+        out_file = '{}/inertia{}{}.h5'.format(output_dir, out_file, suffix)
 
         if os.path.isfile(out_file):
             continue
@@ -166,12 +175,12 @@ if __name__ == '__main__':
         params['alpha']   = alpha
         params['mu']      = mu
         params['c']       = c
-        params['inertia'] = H[i]
         params['D']       = D
         params['DZA']     = DZA
         params['F0']      = F0
         params['frand']   = frand
-        params['gen_id']  = config['gen_id']
+        params['generator_IDs']  = config['generator_IDs']
+        params['inertia'] = [inertia_values[gen_id][i] for gen_id in generator_IDs]
         params.append()
         tbl.flush()
 

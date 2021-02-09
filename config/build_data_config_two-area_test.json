@@ -1,0 +1,28 @@
+{
+    "generator_IDs": ["G1", "G2", "G3", "G4"],
+    "inertia": {
+	"G1": [2.333333, 4.333333, 6.333333, 8.333333, 10.333333],
+	"G2": [2.333333, 4.333333, 6.333333, 8.333333, 10.333333],
+	"G3": [6.175],
+	"G4": [6.175]
+    },
+    "D": 2,
+    "DZA": 60.0,
+    "dur": 300.0,
+    "Ntrials": 100,
+    "F0": 60.0,
+    "alpha": 0.5,
+    "mu": 0.0,
+    "c": 0.5,
+    "frand": 10.0,
+    "netlist": "pan/two-area.pan",
+    "mem_vars": {
+	"time:noise": "time",
+	"omegael07:noise": "omegael_bus7",
+	"omegael09:noise": "omegael_bus9",
+	"pe7:noise": "Pe_bus7",
+	"qe7:noise": "Qe_bus7",
+	"pe9:noise": "Pe_bus9",
+	"qe9:noise": "Qe_bus9"
+    }
+}

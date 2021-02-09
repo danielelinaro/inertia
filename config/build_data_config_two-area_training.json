@@ -1,12 +1,15 @@
 {
-    "Hmin": {HMIN},
-    "Hmax": {HMAX},
-    "gen_id": {GEN_ID},
-    "Hstep": 1.0,
-    "D": {D},
-    "DZA": {DZA},
+    "generator_IDs": ["G1", "G2", "G3", "G4"],
+    "inertia": {
+	"G1": [2, 4, 6, 8, 10],
+	"G2": [2, 4, 6, 8, 10],
+	"G3": [6.175],
+	"G4": [6.175]
+    },
+    "D": 2,
+    "DZA": 60.0,
     "dur": 300.0,
-    "Ntrials": {N},
+    "Ntrials": 2000,
     "F0": 60.0,
     "alpha": 0.5,
     "mu": 0.0,
