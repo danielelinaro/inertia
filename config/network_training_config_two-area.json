@@ -1,8 +1,8 @@
 {
-    "generator_IDs": [1],
-    "data_dirs": ["data/two-area/var_H_G{}/two-area_D=2_DZA=60.0"],
-    "var_names": ["omegael_bus7", "Pe_bus7"],
-    "max_block_size": 1000,
+    "area_IDs": [1, 2],
+    "data_dirs": ["data/two-area/var_H_area_{}/two-area_D=2_DZA=60.0"],
+    "var_names": ["omegael_bus7", "Pe_bus7", "omegael_bus9", "Pe_bus9"],
+    "max_block_size": 250,
     "model_arch": {
 	"N_dims": 1,
 	"N_units": {
@@ -30,7 +30,7 @@
 	}
     },
     "learning_rate_schedule": {
-	"name": "cyclical",
+	"name": null,
 	"exponential_decay": {
 	    "initial_learning_rate": 2e-4,
 	    "decay_steps": 40000,

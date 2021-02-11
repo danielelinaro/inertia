@@ -13,4 +13,6 @@ in_progress
 experiments
 trash
 run_me.sh
+notebooks/*.pdf
+notebooks/*.png
 

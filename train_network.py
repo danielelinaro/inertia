@@ -294,7 +294,7 @@ if __name__ == '__main__':
     print_msg('Seed: {}'.format(seed))
 
     log_to_comet = not args.no_comet
-
+    
     if log_to_comet:
         ### create a CometML experiment
         experiment = Experiment(
@@ -307,31 +307,39 @@ if __name__ == '__main__':
         experiment = None
         experiment_key = strftime('%Y%m%d-%H%M%S', localtime())
 
-    ### generator IDs
-    generator_IDs = config['generator_IDs']
-    N_generators = len(generator_IDs)
+    ### an entity can either be an area or a generator
+    if 'generator_IDs' in config:
+        entity_IDs = config['generator_IDs']
+        entity_name = 'generator'
+    elif 'area_IDs' in config:
+        entity_IDs = config['area_IDs']
+        entity_name = 'area'
+    else:
+        print('One of "area_IDs" or "generator_IDs" must be present in the configuration file.')
+        sys.exit(1)
+
+    N_entities = len(entity_IDs)
 
     ### load the data
-    data_folders = [data_dir.format(gen_id) for gen_id in generator_IDs for data_dir in config['data_dirs']]
+    data_folders = [data_dir.format(ntt_id) for ntt_id in entity_IDs for data_dir in config['data_dirs']]
     for data_folder in data_folders:
         if not os.path.isdir(data_folder):
             print_error('{}: {}: no such directory.'.format(progname, data_folder))
             sys.exit(1)
 
-    inertia = {}
-    for key in ('training', 'test', 'validation'):
-        for ext in ('.h5', '.npz'):
-            inertia[key] = np.sort([float(re.findall('[0-9]+\.[0-9]*', f)[-1]) \
-                                    for f in glob.glob(data_folders[0] + '/*' + key + '*' + ext)])
-            if len(inertia[key]) > 0:
-                break
+    data_files = {}
+    for key in 'training', 'test', 'validation':
+        all_files = [glob.glob(data_folder + '/*' + key + '_set.h5') for data_folder in data_folders]
+        data_files[key] = [item for sublist in all_files for item in sublist]
 
-    var_names = [var_name.format(gen_id) for gen_id in generator_IDs for var_name in config['var_names']]
+    var_names = config['var_names']
+
     try:
         max_block_size = config['max_block_size']
     except:
         max_block_size = np.inf
-    time, x, y = load_data(data_folders, generator_IDs, inertia, var_names, max_block_size)
+
+    time, x, y = load_data_two_area(data_files, var_names, max_block_size)
     N_vars, N_training_traces, N_samples = x['training'].shape
 
     ### normalize the data
@@ -396,10 +404,14 @@ if __name__ == '__main__':
         experiment.add_tag('neural_network')
         if 'IEEE14' in config['data_dirs'][0]:
             experiment.add_tag('IEEE14')
+            experiment.add_tag('_'.join([f'G{gen_id}' for gen_id in config['generator_IDs']]))
         elif 'two-area' in config['data_dirs'][0]:
             experiment.add_tag('two-area')
+            if 'area_IDs' in config:
+                experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs']]))
+            else:
+                experiment.add_tag('_'.join([f'G{gen_id}' for gen_id in config['generator_IDs']]))
         experiment.add_tag(str(config['model_arch']['N_dims']) + 'D_pipeline')
-        experiment.add_tag('_'.join([f'G{gen_id}' for gen_id in config['generator_IDs']]))
         D = int(re.findall('D=\d', config['data_dirs'][0])[0].split('=')[1])
         DZA = float(re.findall('DZA=\d+.\d+', config['data_dirs'][0])[0].split('=')[1])
         experiment.add_tag(f'DZA={DZA:g}')
@@ -442,8 +454,8 @@ if __name__ == '__main__':
     ### compute the mean absolute percentage error on the CNN prediction
     y_test = np.squeeze(y['test'].numpy())
     mape_prediction = losses.mean_absolute_percentage_error(y_test.T, y_prediction.T).numpy()
-    for generator_ID, mape in zip(generator_IDs, mape_prediction):
-        print(f'MAPE on CNN prediction for generator {generator_ID} ... {mape:.2f}%')
+    for ntt_ID, mape in zip(entity_IDs, mape_prediction):
+        print(f'MAPE on CNN prediction for {entity_name} {ntt_ID} ... {mape:.2f}%')
     test_results = {'y_test': y_test, 'y_prediction': y_prediction, 'mape_prediction': mape_prediction}
     
     best_model.save(output_path)
@@ -459,9 +471,8 @@ if __name__ == '__main__':
         experiment.log_model('best_model', output_path + '/saved_model.pb')
         experiment.log_image(output_path + '/network_topology.png', 'network_topology')
 
-
     ### plot a summary figure
-    cols = N_generators + 2
+    cols = N_entities + 2
     fig,ax = plt.subplots(1, cols, figsize=(3 * cols, 3))
     ### plot the loss as a function of the epoch number
     epochs = np.r_[0 : len(history.history['loss'])] + 1
@@ -476,10 +487,10 @@ if __name__ == '__main__':
     ax[1].set_xlabel('Epoch')
     ax[1].set_ylabel('Learning rate')
     ### plot the results obtained with the CNN
-    block_size = y['test'].shape[0] // N_generators
+    block_size = y['test'].shape[0] // N_entities
     y_max = np.max(y['training'], axis=0)
     y_min = np.min(y['training'], axis=0)
-    for i in range(N_generators):
+    for i in range(N_entities):
         limits = [y_min[i], y_max[i]+1]
         ax[i+2].plot(limits, limits, 'g--')
         ax[i+2].plot(y['test'][i * block_size : (i+1) * block_size, i], \
@@ -493,7 +504,7 @@ if __name__ == '__main__':
             ax[i+2].plot(j + 1/3, m, 'ms', markersize=6, markerfacecolor='w', markeredgewidth=2)
         ax[i+2].axis([1.8, limits[1], 1.8, limits[1]])
         ax[i+2].set_xlabel('Expected value')
-        ax[i+2].set_title(f'Generator {generator_IDs[i]}')
+        ax[i+2].set_title(f'{entity_name.capitalize()} {entity_IDs[i]}')
     ax[2].set_ylabel('Predicted value')
     for a in ax:
         for side in 'right','top':

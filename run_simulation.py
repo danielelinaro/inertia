@@ -6,7 +6,7 @@ import tables
 import numpy as np
 import pypan.ui as pan
 
-from build_data import Parameters, generator_ids
+from build_data import BaseParameters#, generator_ids
 
 progname = os.path.basename(sys.argv[0])
 
@@ -22,17 +22,14 @@ def OU(dt, alpha, mu, c, N, seed = None):
     return ou
 
 
-class ParametersExt (Parameters):
-    pan_seed = tables.Float64Col()
-
 
 if __name__ == '__main__':
     parser = arg.ArgumentParser(description = 'Simulate the IEEE14 network at a fixed value of inertia', \
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
     parser.add_argument('pan_file', type=str, action='store', help='PAN netlist')
-    parser.add_argument('-H', '--inertia',  type=float, required=True, help='inertia value')
-    parser.add_argument('-G', '--gen-id',  type=int, default=1, help='generator id')
+    parser.add_argument('-H', '--inertia',  type=str, required=True, help='inertia value')
+    parser.add_argument('-G', '--gen-ids',  type=str, required=True, help='generator id(s)')
     parser.add_argument('-d', '--dur', default=300, type=float, help='simulation duration in seconds')
     parser.add_argument('--alpha',  default=0.5,  type=float, help='alpha parameter of the OU process')
     parser.add_argument('--mu',  default=0.0,  type=float, help='mu parameter of the OU process')
@@ -41,25 +38,34 @@ if __name__ == '__main__':
     parser.add_argument('-D', '--damping', default=0, type=int, help='damping coefficient')
     parser.add_argument('--DZA', default=0.036, type=float, help='deadband amplitude')
     parser.add_argument('-F', '--frequency', default=60, type=float, help='baseline frequency of the system')
-    parser.add_argument('-o', '--output',  default='ieee14.h5',  type=str, help='output file name')
+    parser.add_argument('-o', '--output',  default=None,  type=str, help='output file name')
     parser.add_argument('-s', '--seed',  default=None, type=int, help='seed of the random number generator')
     parser.add_argument('-f', '--force', action='store_true', help='force overwrite of output file')
     args = parser.parse_args(args=sys.argv[1:])
 
-    if not os.path.isfile(args.pan_file):
-        print('{}: {}: no such file.'.format(progname, args.pan_file))
+    pan_file = args.pan_file
+    if not os.path.isfile(pan_file):
+        print('{}: {}: no such file.'.format(progname, pan_file))
         sys.exit(1)
 
-    if os.path.isfile(args.output) and not args.force:
-        print('{}: {}: file exists: use -f to overwrite.'.format(progname, args.output))
+    if args.output is None:
+        output_file = os.path.splitext(os.path.basename(pan_file))[0] + '.h5'
+    else:
+        output_file = args.output
+
+    if os.path.isfile(output_file) and not args.force:
+        print('{}: {}: file exists: use -f to overwrite.'.format(progname, output_file))
         sys.exit(2)
 
-    if args.inertia <= 0:
-        print('{}: the inertia value must be > 0'.format(progname))
+    inertia_values = np.array([float(h) for h in args.inertia.split(',')])
+    if np.any(inertia_values <= 0):
+        print('{}: inertia values must be > 0'.format(progname))
         sys.exit(3)
 
-    if not args.gen_id in generator_ids:
-        print('{}: generator id must be one of {}'.format(progname, generator_ids))
+    generator_IDs = args.gen_ids.split(',')
+    N_generators = len(generator_IDs)
+    if len(inertia_values) != N_generators:
+        print('The number of inertia values must match the number of generator IDs.')
         sys.exit(4)
 
     if args.seed is None:
@@ -80,23 +86,49 @@ if __name__ == '__main__':
     t = dt + np.r_[0 : tstop + dt/2 : dt]
     N_samples = t.size
 
-    # value of inertia
-    H = args.inertia
+    if 'ieee14' in pan_file.lower():
+        mem_vars_map = {
+	    'time:noise': 'time',
+	    'omegacoi:noise': 'omega_coi',
+	    'omega01:noise': 'omega_G1',
+	    'omega02:noise': 'omega_G2',
+	    'G3:omega:noise': 'omega_G3',
+	    'G6:omega:noise': 'omega_G6',
+	    'G8:omega:noise': 'omega_G8',
+	    'omegael01:noise': 'omegael_G1',
+	    'omegael02:noise': 'omegael_G2',
+	    'omegael03:noise': 'omegael_G3',
+	    'omegael06:noise': 'omegael_G6',
+	    'omegael08:noise': 'omegael_G8',
+	    'DevTime': null,
+	    'G1:pe': ['Pe_G1', 'DevTime', 'time:noise'],
+	    'G1:qe': ['Qe_G1', 'DevTime', 'time:noise'],
+	    'G2:pe': ['Pe_G2', 'DevTime', 'time:noise'],
+	    'G2:qe': ['Qe_G2', 'DevTime', 'time:noise'],
+	    'G3:pe': ['Pe_G3', 'DevTime', 'time:noise'],
+	    'G3:qe': ['Qe_G3', 'DevTime', 'time:noise'],
+	    'G6:pe': ['Pe_G6', 'DevTime', 'time:noise'],
+	    'G6:qe': ['Qe_G6', 'DevTime', 'time:noise'],
+	    'G8:pe': ['Pe_G8', 'DevTime', 'time:noise'],
+	    'G8:qe': ['Qe_G8', 'DevTime', 'time:noise']
+        }
+    elif 'two' in pan_file.lower() and 'area' in pan_file.lower():
+        mem_vars_map = {
+	    'time:noise': 'time',
+	    'omegael07:noise': 'omegael_bus7',
+	    'omegael09:noise': 'omegael_bus9',
+	    'pe7:noise': 'Pe_bus7',
+	    'qe7:noise': 'Qe_bus7',
+	    'pe9:noise': 'Pe_bus9',
+	    'qe9:noise': 'Qe_bus9'
+        }
+    mem_vars = list(mem_vars_map.keys())
+    time_mem_var = mem_vars[['time' in mem_var for mem_var in mem_vars].index(True)]
+    time_disk_var = mem_vars_map[time_mem_var]
 
-    mem_vars = ['time:noise', 'omega01:noise', 'omega02:noise', 'G3:omega:noise', \
-                'G6:omega:noise', 'G8:omega:noise', 'omegacoi:noise', \
-                'omegael01:noise', 'omegael02:noise', 'omegael03:noise', \
-                'omegael06:noise', 'omegael08:noise']
-    mem_vars.append('DevTime')
-    for gen_id in generator_ids:
-        mem_vars.append(f'G{gen_id}:pe')
-        mem_vars.append(f'G{gen_id}:qe')
-
-    disk_vars = ['^omega', '^G.*omega$']#, '^G[0-9]+[pq]$']
-
-    ok,libs = pan.load_netlist(args.pan_file)
+    ok,libs = pan.load_netlist(pan_file)
     if not ok:
-        print('Cannot load netlist from file {}.'.format(args.pan_file))
+        print('Cannot load netlist from file {}.'.format(pan_file))
         sys.exit(4)
 
     D = args.damping
@@ -105,7 +137,8 @@ if __name__ == '__main__':
     pan.alter('Alfrand', 'FRAND', frand, annotate=1)
     pan.alter('Ald',     'D',     D,     annotate=1)
     pan.alter('Aldza',   'DZA',   DZA,   annotate=1)
-    pan.alter('Alh',     'm',     2 * H, instance=f'G{args.gen_id}', annotate=1)
+    for gen_id, H in zip(generator_IDs, inertia_values):
+        pan.alter('Alh', 'm', 2 * H, instance=gen_id, annotate=1)
 
     np.random.seed(rng_seed)
     pan_seed = np.random.randint(low=0, high=1000000)
@@ -116,9 +149,7 @@ if __name__ == '__main__':
 
     data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=2, maxord=2, \
                     noisefmax=frand/2, noiseinj=2, seed=pan_seed, \
-                    iabstol=1e-6, devvars=1, tmax=0.1, annotate=3, \
-                    savelist='["' + '","'.join(disk_vars) + '"]')
-
+                    iabstol=1e-6, devvars=1, tmax=0.1, annotate=3)
 
     # save the results to file
     get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]
@@ -126,56 +157,48 @@ if __name__ == '__main__':
     compression_filter = tables.Filters(complib='zlib', complevel=5)
     atom = tables.Float64Atom()
 
-    fid = tables.open_file(args.output, 'w', filters=compression_filter)
-    tbl = fid.create_table(fid.root, 'parameters', ParametersExt, 'parameters')
+    class Parameters (BaseParameters):
+        generator_IDs = tables.StringCol(8, shape=(N_generators,))
+        inertia = tables.Float64Col(shape=(N_generators,))
+        pan_seed = tables.Float64Col()
+
+    fid = tables.open_file(output_file, 'w', filters=compression_filter)
+    tbl = fid.create_table(fid.root, 'parameters', Parameters, 'parameters')
     params = tbl.row
     params['hw_seed']  = rng_seed
     params['pan_seed'] = pan_seed
     params['alpha']    = alpha
     params['mu']       = mu
     params['c']        = c
-    params['inertia']  = H
     params['D']        = D
     params['DZA']      = DZA
     params['F0']       = args.frequency
     params['frand']    = frand
-    params['gen_id']   = args.gen_id
+    params['inertia']  = inertia_values
+    params['generator_IDs'] = generator_IDs
     params.append()
     tbl.flush()
 
-    time = get_var(data, mem_vars, 'time:noise')
-    fid.create_array(fid.root, 'time', time)
-    fid.create_array(fid.root, 'omega_coi', get_var(data, mem_vars, 'omegacoi:noise'))
-
-    for gen_id in (1,2):
-        key = f'omega_G{gen_id}'
-        fid.create_array(fid.root, key, get_var(data, mem_vars, f'omega{gen_id:02d}:noise'))
-
-    for gen_id in (3,6,8):
-        key = f'omega_G{gen_id}'
-        fid.create_array(fid.root, key, get_var(data, mem_vars, f'G{gen_id}:omega:noise'))
-
-    for gen_id in generator_ids:
-        # the electrical omega in PAN has zero mean, so it needs to
-        # be shifted at 1 p.u.
-        key = f'omegael_G{gen_id}'
-        fid.create_array(fid.root, key, 1.0 + get_var(data, mem_vars, f'omegael{gen_id:02d}:noise'))
-
-    dev_time = get_var(data, mem_vars, 'DevTime')
-    try:
-        idx = np.array([np.where(dev_time == tt)[0][0] for tt in time])
-        is_subset = True
-    except:
-        is_subset = False
-    for gen_id in generator_ids:
-        for lbl in ('p','q'):
-            var = get_var(data, mem_vars, f'G{gen_id}:{lbl}e')
-            key = f'{lbl.upper()}e_G{gen_id}'
-            if is_subset:
-                fid.create_array(fid.root, key, var[idx])
-            else:
-                f = interp1d(dev_time, var)
-                fid.create_array(fid.root, key, f(time))
+    for k,mem_var in enumerate(mem_vars):
+        disk_var = mem_vars_map[mem_var]
+        if 'omegael' in mem_var:
+            offset = 1.
+        else:
+            offset = 0.
+        if disk_var is not None:
+            if isinstance(disk_var, str):
+                fid.create_array(fid.root, disk_var, get_var(data, mem_vars, mem_var) + offset)
+            elif isinstance(disk_var, list):
+                disk_var, orig_time_var, resampled_time_var = disk_var
+                var = get_var(data, mem_vars, mem_var)
+                orig_time = get_var(data, mem_vars, orig_time_var)
+                resampled_time = get_var(data, mem_vars, resampled_time_var)
+                try:
+                    idx = np.array([np.where(origin_time == tt)[0][0] for tt in resampled_time])
+                    fid.create_array(fid.root, disk_var, var[idx] + offset)
+                except:
+                    f = interp1d(orig_time, var)
+                    fid.create_array(fid.root, disk_var, f(resampled_time) + offset)
 
     fid.close()
 
