@@ -22,6 +22,7 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--force', action='store_true', \
                         help='force overwrite of output file (ignored if -o is provided)')
     parser.add_argument('-v', '--variables', default=None, type=str, help='variables to save')
+    parser.add_argument('-V', '--variable-names', default=None, type=str, help='variable names to use')
     parser.add_argument('-l', '--list', action='store_true', help='list variables contained in file')
     parser.add_argument('-q', '--quiet', action='store_true', help='do not print anything to terminal')
     parser.add_argument('-P', '--power', action='store_true', help='save power related variables')
@@ -92,16 +93,19 @@ if __name__ == '__main__':
         sys.stdout.write('Saving data to {}... '.format(out_file))
         sys.stdout.flush()
 
-    conversion = {
-        'omega01': 'omega_G1',
-        'omega02': 'omega_G2',
-        'G3:omega': 'omega_G3',
-        'G6:omega': 'omega_G6',
-        'G8:omega': 'omega_G8'
-    }
-    for gen_id in generator_ids:
-        for lbl in 'p','q':
-            conversion[f'G{gen_id}:{lbl}e'] = f'{lbl.upper()}e_G{gen_id}'
+    if args.variable_names is None:
+        conversion = {
+            'omega01': 'omega_G1',
+            'omega02': 'omega_G2',
+            'G3:omega': 'omega_G3',
+            'G6:omega': 'omega_G6',
+            'G8:omega': 'omega_G8'
+        }
+        for gen_id in generator_ids:
+            for lbl in 'p','q':
+                conversion[f'G{gen_id}:{lbl}e'] = f'{lbl.upper()}e_G{gen_id}'
+    else:
+        conversion = {k: v for k, v in zip(var_names, args.variable_names.split(','))}
 
     if args.append:
         mode = 'a'
@@ -136,7 +140,11 @@ if __name__ == '__main__':
                 f = interp1d(dev_time, v)
                 fid.create_array(fid.root, key, f(time))
         elif not args.power:
-            fid.create_array(fid.root, key, v)
+            if 'omegael' in key:
+                offset = 1.0
+            else:
+                offset = 0.0
+            fid.create_array(fid.root, key, v + offset)
     fid.close()
 
     if not args.quiet:
