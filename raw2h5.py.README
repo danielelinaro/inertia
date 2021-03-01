@@ -1,0 +1,1 @@
+python3 raw2h5.py -o two-area_step.h5 -v time,omegael07,omegael09,pe7,qe7,pe9,qe9  -V time,omegael_bus7,omegael_bus9,Pe_bus7,Qe_bus7,Pe_bus9,Qe_bus9  pan/two-area_step.raw/Tr@noise
