@@ -5,6 +5,7 @@ parameters L25=25 L10=10 L110=110
 parameters F0=60 TSTOP=60
 parameters TYPE=4 D=2 DZA=1
 parameters PRAND=1M FRAND=10
+parameter G2Prating=0.5G
 
 options outintnodes=yes 
 
@@ -57,7 +58,7 @@ Tg2a pm02a omega02a     powertg type=1 omegaref=1 r=0.02 pmax=1 pmin=0.0 \
 		 	        ts=0.1 tc=0.45 t3=0 t4=12 t5=50 dza=DZA
 
 G2a       g2a   ex2a pm02a omega02a powergenerator vg=1 type=TYPE omegab=F0*2*pi \
-		    vrating=20k prating=1G pg=0.35 \
+		    vrating=20k prating=G2Prating pg=0.7 \
 		    xd=1.8 xq=1.7 xl=0.2 xdp=0.3 xqp=0.55 xds=0.25 xqs=0.25 \
 		    ra=2.5m td0p=8 tq0p=0.4 td0s=0.03 tq0s=0.05 \
 		    d=D m=2*6.5
@@ -69,7 +70,7 @@ Tg2b pm02b omega02b     powertg type=1 omegaref=1 r=0.02 pmax=1 pmin=0.0 \
 		  	        ts=0.1 tc=0.45 t3=0 t4=12 t5=50 dza=DZA
 
 G2b       g2b   ex2b pm02b omega02b powergenerator vg=1 type=TYPE omegab=F0*2*pi \
-		    vrating=20k prating=1G pg=0.35 \
+		    vrating=20k prating=G2Prating pg=0.7 \
 		    xd=1.8 xq=1.7 xl=0.2 xdp=0.3 xqp=0.55 xds=0.25 xqs=0.25 \
 		    ra=2.5m td0p=8 tq0p=0.4 td0s=0.03 tq0s=0.05 \
 		    d=D m=2*6.5
@@ -114,8 +115,8 @@ Pec4 bus9 omegael09 gnd powerec type=2
 // Transformers connecting machine to busses
 //
 T15      g1  bus5   powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
-;T2a6     g2a bus6a  powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
-T2a5     g2a bus5   powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
+;T2a5     g2a bus5   powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
+T2a6     g2a bus6a  powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
 T2b6     g2b bus6a  powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
 T311     g3  bus11  powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
 T410     g4  bus10a powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
