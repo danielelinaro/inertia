@@ -496,13 +496,13 @@ if __name__ == '__main__':
         ax[i+2].plot(y['test'][i * block_size : (i+1) * block_size, i], \
                      y_prediction[i * block_size : (i+1) * block_size, i], 'o', \
                      color=[1,.7,1], markersize=4, markerfacecolor='w', markeredgewidth=1)
-        for j in range(int(limits[0]), int(limits[1])):
-            idx, = np.where(np.abs(y['test'][i * block_size : (i+1) * block_size, i] - (j + 1/3)) < 1e-3)
+        for y_target in np.unique(y['test'][i * block_size : (i+1) * block_size, i]):
+            idx, = np.where(np.abs(y['test'][i * block_size : (i+1) * block_size, i] - y_target) < 1e-3)
             m = np.mean(y_prediction[idx + i * block_size, i])
             s = np.std(y_prediction[idx + i * block_size, i])
-            ax[i+2].plot(j + 1/3 + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
-            ax[i+2].plot(j + 1/3, m, 'ms', markersize=6, markerfacecolor='w', markeredgewidth=2)
-        ax[i+2].axis([1.8, limits[1], 1.8, limits[1]])
+            ax[i+2].plot(y_target + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
+            ax[i+2].plot(y_target, m, 'ms', markersize=6, markerfacecolor='w', markeredgewidth=2)
+        ax[i+2].axis([limits[0] - 1, limits[1] + 1, limits[0] - 1, limits[1] + 1])
         ax[i+2].set_xlabel('Expected value')
         ax[i+2].set_title(f'{entity_name.capitalize()} {entity_IDs[i]}')
     ax[2].set_ylabel('Predicted value')

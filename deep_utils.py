@@ -55,7 +55,16 @@ def load_data_two_area(data_files, var_names, max_block_size = np.inf, dtype = n
     for key in data_files:
         for data_file in data_files[key]:
             time, x, h = load_one_block(data_file, var_names, 60, max_block_size, dtype)
-            y = np.tile(np.array([h[:2].mean(), h[2:].mean()]), [x.shape[1], 1])
+            if h.size != 4:
+                raise Exception('Are you using a two-area network???')
+            # in the following we assume that the first two generators are in area 1
+            # and the other two are in area 2
+            # take the mean inertia
+            #y = np.tile(np.array([h[:2].mean(), h[2:].mean()]), [x.shape[1], 1])
+            # take the sum of each inertia multiplied by the nominal power of each generator
+            # and divide by 1e9: in the original two-area network, each generator has a nominal
+            # power of 1 GW.
+            y = np.tile(np.array([h[:2].sum(), h[2:].sum()]), [x.shape[1], 1])
             try:
                 X[key] = np.concatenate((X[key], x), axis=1)
                 Y[key] = np.concatenate((Y[key], y), axis=0)
