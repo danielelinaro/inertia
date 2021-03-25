@@ -19,7 +19,7 @@ generator_ids = {'IEEE14': (1,2,3,6,8), 'two-area': (1,2,3,4)}
 
 
 class BaseParameters (tables.IsDescription):
-    hw_seed = tables.Float64Col()
+    hw_seed = tables.Int64Col()
     alpha   = tables.Float64Col()
     mu      = tables.Float64Col()
     c       = tables.Float64Col()
