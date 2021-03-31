@@ -3,6 +3,7 @@
     "data_dirs": ["data/two-area/var_H_area_{}/two-area_D=2_DZA=60.0"],
     "var_names": ["omegael_bus7", "Pe_bus7", "omegael_bus9", "Pe_bus9"],
     "max_block_size": 250,
+    "normalization": "batch",
     "model_arch": {
 	"N_dims": 1,
 	"N_units": {

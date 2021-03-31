@@ -41,7 +41,7 @@ class LearningRateCallback(keras.callbacks.Callback):
             self.experiment.log_metric('learning_rate', lr, self.step)
 
 
-def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, activation_fun, activation_loc, input_name):
+def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, batch_norm, activation_fun, activation_loc, input_name):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
             raise Exception(f'Unknown activation function {activation_fun}')
@@ -50,11 +50,16 @@ def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, activation_f
         elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
     inp = keras.Input(shape=(N_samples, 1), name=input_name)
+    if batch_norm:
+        norm = layers.BatchNormalization()(inp)
     for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
         try:
             L = layers.Conv1D(N_conv, sz, activation=None)(L)
         except:
-            L = layers.Conv1D(N_conv, sz, activation=None)(inp)
+            if batch_norm:
+                L = layers.Conv1D(N_conv, sz, activation=None)(norm)
+            else:
+                L = layers.Conv1D(N_conv, sz, activation=None)(inp)
         if activation_fun is not None:
             if activation_loc == 'after_conv':
                 L = layers.ReLU()(L)
@@ -67,7 +72,7 @@ def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, activation_f
     return inp,L
 
 
-def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, activation_fun, activation_loc, input_name):
+def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, batch_norm, activation_fun, activation_loc, input_name):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
             raise Exception(f'Unknown activation function {activation_fun}')
@@ -76,11 +81,16 @@ def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, activation_f
         elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
     inp = keras.Input(shape=(N_samples, 2, 1), name=input_name)
+    if batch_norm:
+        norm = layers.BatchNormalization()(inp)
     for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
         try:
             L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(L)
         except:
-            L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(inp)
+            if batch_norm:
+                L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(norm)
+            else:
+                L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(inp)
         if activation_fun is not None:
             if activation_loc == 'after_conv':
                 L = layers.ReLU()(L)
@@ -93,7 +103,7 @@ def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, activation_f
     return inp,L
 
 
-def build_model(N_samples, steps_per_epoch, var_names, model_arch, \
+def build_model(N_samples, steps_per_epoch, var_names, model_arch, batch_norm, \
                 loss_fun_pars, optimizer_pars, lr_schedule_pars):
     """
     Builds and compiles the model
@@ -177,14 +187,14 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, \
         L = []
         for var_name in var_names:
             inp,lyr = make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, \
-                                                     activation_fun, activation_loc, \
-                                                     var_name)
+                                                     batch_norm, activation_fun, \
+                                                     activation_loc, var_name)
             inputs.append(inp)
             L.append(lyr)
     else:
         inputs,L = make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, \
-                                                  activation_fun, activation_loc, \
-                                                  '_'.join(var_names))
+                                                  batch_norm, activation_fun, \
+                                                  activation_loc, '_'.join(var_names))
 
     if isinstance(L, list):
         L = layers.concatenate(L)
@@ -345,8 +355,10 @@ if __name__ == '__main__':
     ### normalize the data
     x_train_mean = np.mean(x['training'], axis=(1, 2))
     x_train_std = np.std(x['training'], axis=(1, 2))
-    for key in x:
-        x[key] = tf.constant([(x[key][i].numpy() - m) / s for i,(m,s) in enumerate(zip(x_train_mean, x_train_std))])
+    batch_norm = config['normalization'].lower() == 'batch'
+    if not batch_norm:
+        for key in x:
+            x[key] = tf.constant([(x[key][i].numpy() - m) / s for i,(m,s) in enumerate(zip(x_train_mean, x_train_std))])
 
     if 'learning_rate_schedule' in config and config['learning_rate_schedule']['name'] is not None:
         lr_schedule = config['learning_rate_schedule'][config['learning_rate_schedule']['name']]
@@ -378,6 +390,7 @@ if __name__ == '__main__':
                                          steps_per_epoch,
                                          var_names,
                                          config['model_arch'],
+                                         batch_norm,
                                          config['loss_function'],
                                          optimizer_pars,
                                          lr_schedule)
@@ -416,6 +429,8 @@ if __name__ == '__main__':
         DZA = float(re.findall('DZA=\d+.\d+', config['data_dirs'][0])[0].split('=')[1])
         experiment.add_tag(f'DZA={DZA:g}')
         experiment.add_tag(f'D={D:d}')
+        if batch_norm:
+            experiment.add_tag('batch_norm')
         try:
             experiment.add_tag(config['learning_rate_schedule']['name'].split('_')[0] + '_lr')
         except:
@@ -457,7 +472,7 @@ if __name__ == '__main__':
     for ntt_ID, mape in zip(entity_IDs, mape_prediction):
         print(f'MAPE on CNN prediction for {entity_name} {ntt_ID} ... {mape:.2f}%')
     test_results = {'y_test': y_test, 'y_prediction': y_prediction, 'mape_prediction': mape_prediction}
-    
+
     best_model.save(output_path)
     pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
     pickle.dump(test_results, open(output_path + '/test_results.pkl', 'wb'))
