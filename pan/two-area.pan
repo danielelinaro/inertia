@@ -124,14 +124,16 @@ L1011  bus10a bus11  powerline prating=100M r=L25*RL  x=L25*XL  b=L25*BC  vratin
 //
 // Loads
 //
-Lo7    bus7       powerload pc=0.967 qc=0.1+1*-0.2  vrating=230k prating=1G
-Lo9    bus9       powerload pc=1.767/1.3 qc=0.1+1*-0.35 vrating=230k prating=1G
+Lo7    bus7       cntp powerload pc=0.967 qc=0.1+1*-0.2  vrating=230k prating=1G
+Lo9    bus9       cntp powerload pc=1.767/1.3 qc=0.1+1*-0.35 vrating=230k prating=1G
 
 Pe5    bus5  d5  gnd  q5  gnd  powerec type=0
 Pe8    bus8  d8  gnd  q8  gnd  powerec type=0
 Pe11   bus11 d11 gnd  q11 gnd  powerec type=0
 
 end
+
+CntLo cntp gnd vsource vsin=0.02 freq=1/(24*3600/2)
 
 //
 // Random load(s)

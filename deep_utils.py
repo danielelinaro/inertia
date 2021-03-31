@@ -132,40 +132,55 @@ def slide_window(X, window_size, overlap=None, window_step=None, N_windows=-1):
     for i in range(N_windows):
         idx[i,:] = i * window_step + np.r_[0 : window_size]
         try:
-
             Y[i,:] = X[idx[i,:]]
         except:
             print('>>> {:04d}/{:04d}'.format(i, N_windows))
             break
     return Y, idx
 
-def load_data_slide(data_files, var_names, data_mean = None, data_std = None, window_dur = 60, window_step = 10, verbose=False):
+def load_data_slide(data_files, var_names, data_mean = None, data_std = None, window_dur = 60, window_step = 10, normalize_sliding=False, verbose=False):
     fids = [tables.open_file(data_file, 'r') for data_file in data_files]
     n_files = len(data_files)
+    params = fids[0].root.parameters.read()
+    dt = 1 / params['frand'][0]
+    window_size = int(window_dur / dt)
+    if verbose:
+        print('Window size: {:d} samples'.format(window_size))
     time = [fids[0].root.time.read()]
     for i in range(1, n_files):
         time.append(fids[i].root.time.read() + time[i-1][-1])
     time = np.concatenate(time)
     N_samples = time.size
     data = {var_name: np.concatenate([fid.root[var_name] for fid in fids]) for var_name in var_names}
-    if data_mean is None:
-        data_mean = {var_name: np.mean(data[var_name]) for var_name in var_names}
-        print(f'data_mean = {data_mean}')
-    if data_std is None:
-        data_std = {var_name: np.std(data[var_name]) for var_name in var_names}
-        print(f'data_std = {data_std}')
-    data_normalized = {var_name: (data[var_name] - data_mean[var_name]) / data_std[var_name] for var_name in var_names}
-    params = fids[0].root.parameters.read()
-    dt = 1 / params['frand'][0]
-    window_size = int(window_dur / dt)
-    if verbose:
-        print('Window size: {:d} samples'.format(window_size))
+    if not normalize_sliding:
+        if data_mean is None:
+            data_mean = {var_name: np.mean(data[var_name]) for var_name in var_names}
+            print(f'data_mean = {data_mean}')
+        if data_std is None:
+            data_std = {var_name: np.std(data[var_name]) for var_name in var_names}
+            print(f'data_std = {data_std}')
+        data_normalized = {var_name: (data[var_name] - data_mean[var_name]) / data_std[var_name] for var_name in var_names}
+        data_to_split = data_normalized
+    else:
+        data_normalized = None
+        data_to_split = data
     data_sliding = {}
     indexes = {}
     for var_name in var_names:
-        data_sliding[var_name], indexes[var_name] = slide_window(data_normalized[var_name],
-                                                                  window_size,
-                                                                  window_step=window_step)
+        data_sliding[var_name], indexes[var_name] = slide_window(data_to_split[var_name],
+                                                                 window_size,
+                                                                 window_step=window_step)
+        if normalize_sliding:
+            if data_mean is None:
+                mu = np.tile(data_sliding[var_name].mean(axis=1), [data_sliding[var_name].shape[1], 1]).T
+            else:
+                mu = data_mean[var_name]
+            if data_std is None:
+                sigma = np.tile(data_sliding[var_name].std(axis=1), [data_sliding[var_name].shape[1], 1]).T
+            else:
+                sigma = data_std[var_name]
+            data_sliding[var_name] = (data_sliding[var_name] - mu) / sigma
+
     if verbose:
         print('Number of trials: {:d}'.format(data_sliding[var_names[0]].shape[0]))
 
