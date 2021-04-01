@@ -41,7 +41,7 @@ class LearningRateCallback(keras.callbacks.Callback):
             self.experiment.log_metric('learning_rate', lr, self.step)
 
 
-def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, batch_norm, activation_fun, activation_loc, input_name):
+def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation_fun, activation_loc):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
             raise Exception(f'Unknown activation function {activation_fun}')
@@ -49,17 +49,11 @@ def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, batch_norm, 
             raise Exception(f'Must specify activation function location')
         elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
-    inp = keras.Input(shape=(N_samples, 1), name=input_name)
-    if batch_norm:
-        norm = layers.BatchNormalization()(inp)
     for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
         try:
             L = layers.Conv1D(N_conv, sz, activation=None)(L)
         except:
-            if batch_norm:
-                L = layers.Conv1D(N_conv, sz, activation=None)(norm)
-            else:
-                L = layers.Conv1D(N_conv, sz, activation=None)(inp)
+            L = layers.Conv1D(N_conv, sz, activation=None)(input_layer)
         if activation_fun is not None:
             if activation_loc == 'after_conv':
                 L = layers.ReLU()(L)
@@ -69,10 +63,10 @@ def make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, batch_norm, 
                 L = layers.ReLU()(L)
         else:
             L = layers.MaxPooling1D(N_pooling)(L)
-    return inp,L
+    return L
 
 
-def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, batch_norm, activation_fun, activation_loc, input_name):
+def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, activation_fun, activation_loc):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
             raise Exception(f'Unknown activation function {activation_fun}')
@@ -80,17 +74,11 @@ def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, batch_norm, 
             raise Exception(f'Must specify activation function location')
         elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
-    inp = keras.Input(shape=(N_samples, 2, 1), name=input_name)
-    if batch_norm:
-        norm = layers.BatchNormalization()(inp)
     for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
         try:
             L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(L)
         except:
-            if batch_norm:
-                L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(norm)
-            else:
-                L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(inp)
+            L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(input_layer)
         if activation_fun is not None:
             if activation_loc == 'after_conv':
                 L = layers.ReLU()(L)
@@ -100,11 +88,11 @@ def make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, batch_norm, 
                 L = layers.ReLU()(L)
         else:
             L = layers.MaxPooling2D([N_pooling, 1])(L)
-    return inp,L
+    return L
 
 
-def build_model(N_samples, steps_per_epoch, var_names, model_arch, batch_norm, \
-                loss_fun_pars, optimizer_pars, lr_schedule_pars):
+def build_model(N_samples, steps_per_epoch, var_names, model_arch, \
+                normalization_strategy, loss_fun_pars, optimizer_pars, lr_schedule_pars):
     """
     Builds and compiles the model
     
@@ -182,19 +170,33 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, batch_norm, \
     activation_fun = model_arch['preproc_activation']
     activation_loc = model_arch['activation_loc']
 
+    ### figure out how data should be normalized
+    batch_norm = config['normalization'].lower() == 'batch'
+    normalization_layer = config['normalization'].lower() == 'layer'
+
     if N_dims == 1:
         inputs = []
         L = []
         for var_name in var_names:
-            inp,lyr = make_preprocessing_pipeline_1D(N_samples, N_units, kernel_size, \
-                                                     batch_norm, activation_fun, \
-                                                     activation_loc, var_name)
-            inputs.append(inp)
+            input_layer = keras.Input(shape=(N_samples, 1), name=var_name)
+            inputs.append(input_layer)
+            if batch_norm:
+                input_layer = layers.BatchNormalization()(input_layer)
+            elif normalization_layer:
+                input_layer = layers.experimental.preprocessing.Normalization()(input_layer)
+            lyr = make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, \
+                                                 activation_fun, activation_loc)
             L.append(lyr)
     else:
-        inputs,L = make_preprocessing_pipeline_2D(N_samples, N_units, kernel_size, \
-                                                  batch_norm, activation_fun, \
-                                                  activation_loc, '_'.join(var_names))
+        inputs = keras.Input(shape=(N_samples, 2, 1), name='_'.join(var_names))
+        if batch_norm:
+            input_layer = layers.BatchNormalization()(inputs)
+        elif normalization_layer:
+            input_layer = layers.experimental.preprocessing.Normalization()(inputs)
+        else:
+            input_layer = inputs
+        L = make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, \
+                                           activation_fun, activation_loc)
 
     if isinstance(L, list):
         L = layers.concatenate(L)
@@ -352,11 +354,10 @@ if __name__ == '__main__':
     time, x, y = load_data_two_area(data_files, var_names, max_block_size)
     N_vars, N_training_traces, N_samples = x['training'].shape
 
-    ### normalize the data
+    # we always compute mean and std of the training set, whether we'll be using them or not
     x_train_mean = np.mean(x['training'], axis=(1, 2))
     x_train_std = np.std(x['training'], axis=(1, 2))
-    batch_norm = config['normalization'].lower() == 'batch'
-    if not batch_norm:
+    if config['normalization'].lower() == 'training_set':
         for key in x:
             x[key] = tf.constant([(x[key][i].numpy() - m) / s for i,(m,s) in enumerate(zip(x_train_mean, x_train_std))])
 
@@ -390,10 +391,23 @@ if __name__ == '__main__':
                                          steps_per_epoch,
                                          var_names,
                                          config['model_arch'],
-                                         batch_norm,
+                                         config['normalization'],
                                          config['loss_function'],
                                          optimizer_pars,
                                          lr_schedule)
+
+    if config['normalization'].lower() == 'layer':
+        for i,layer in enumerate(model.layers):
+            if isinstance(layer, layers.experimental.preprocessing.Normalization):
+                break
+        for j,layer in enumerate(model.layers[i : i + N_vars]):
+            layer.adapt(x['training'][j].numpy().flatten())
+            w = layer.get_weights()
+            print('-' * 35)
+            print(f'{var_names[j]}')
+            print(f'means = {x_train_mean[j]:12.4e}, {w[0][0]:12.4e}')
+            print(f'vars  = {x_train_std[j] ** 2:12.4e}, {w[1][0]:12.4e}')
+
     model.summary()
 
     if log_to_comet:
@@ -429,8 +443,10 @@ if __name__ == '__main__':
         DZA = float(re.findall('DZA=\d+.\d+', config['data_dirs'][0])[0].split('=')[1])
         experiment.add_tag(f'DZA={DZA:g}')
         experiment.add_tag(f'D={D:d}')
-        if batch_norm:
+        if config['normalization'].lower() == 'batch_norm':
             experiment.add_tag('batch_norm')
+        elif config['normalization'].lower() == 'layer':
+            experiment.add_tag('normalization_layer')
         try:
             experiment.add_tag(config['learning_rate_schedule']['name'].split('_')[0] + '_lr')
         except:
