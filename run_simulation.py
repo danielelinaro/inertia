@@ -8,23 +8,9 @@ import numpy as np
 import pypan.ui as pan
 from numpy.random import RandomState, SeedSequence, MT19937
 
-from build_data import BaseParameters
+from build_data import BaseParameters, OU
 
 progname = os.path.basename(sys.argv[0])
-
-
-def OU(dt, alpha, mu, c, N, random_state = None):
-    coeff = np.array([alpha * mu * dt, 1 / (1 + alpha * dt)])
-    if random_state is not None:
-        rnd = c * np.sqrt(dt) * random_state.normal(size=N)
-    else:
-        rnd = c * np.sqrt(dt) * np.random.normal(size=N)
-    ou = np.zeros(N)
-    for i in range(N-1):
-        ou[i+1] = (ou[i] + coeff[0] + rnd[i]) * coeff[1]
-    return ou
-
-
 
 if __name__ == '__main__':
     parser = arg.ArgumentParser(description = 'Simulate the IEEE14 network at a fixed value of inertia', \
@@ -109,28 +95,25 @@ if __name__ == '__main__':
     inertia_values = np.array([config['inertia'][gen_id] for gen_id in generator_IDs])
 
     class Parameters (BaseParameters):
-        generator_IDs = tables.StringCol(8, shape=(N_generators,))
+        generator_IDs  = tables.StringCol(8, shape=(N_generators,))
         rnd_load_buses = tables.Int64Col(shape=(N_random_loads,))
-        rng_seeds = tables.Int64Col(shape=(N_random_loads,))
-        pan_seeds = tables.Int64Col(shape=(N_blocks,))
-        alpha_vec = tables.Float64Col(shape=(N_random_loads,))
-        inertia = tables.Float64Col(shape=(N_generators,N_blocks))
-        mu_vec  = tables.Float64Col(shape=(N_random_loads,))
-        c_vec   = tables.Float64Col(shape=(N_random_loads,))
-        tstop   = tables.Float64Col(shape=(N_blocks,))
-        LAMBDA  = tables.Float64Col()
-        COEFF   = tables.Float64Col()
+        rng_seeds      = tables.Int64Col(shape=(N_random_loads,))
+        pan_seeds      = tables.Int64Col(shape=(N_blocks,))
+        inertia        = tables.Float64Col(shape=(N_generators,N_blocks))
+        alpha          = tables.Float64Col(shape=(N_random_loads,))
+        mu             = tables.Float64Col(shape=(N_random_loads,))
+        c              = tables.Float64Col(shape=(N_random_loads,))
+        tstop          = tables.Float64Col(shape=(N_blocks,))
 
     fid = tables.open_file(output_file, 'w', filters=tables.Filters(complib='zlib', complevel=5))
     tbl = fid.create_table(fid.root, 'parameters', Parameters, 'parameters')
     params = tbl.row
-    params['hw_seed']        = 0
     params['rng_seeds']      = rng_seeds
     params['pan_seeds']      = pan_seeds
     params['tstop']          = config['tstop']
-    params['alpha_vec']      = alpha
-    params['mu_vec']         = mu
-    params['c_vec']          = c
+    params['alpha']          = alpha
+    params['mu']             = mu
+    params['c']              = c
     params['D']              = D
     params['DZA']            = DZA
     params['LAMBDA']         = LAMBDA

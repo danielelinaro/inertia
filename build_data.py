@@ -6,27 +6,39 @@ import glob
 import shutil
 import argparse as arg
 import numpy as np
+from numpy.random import RandomState, SeedSequence, MT19937
 from scipy.interpolate import interp1d
 from tempfile import NamedTemporaryFile
 import tables
 
 import pypan.ui as pan
 
-__all__ = ['BaseParameters', 'generator_ids']
+__all__ = ['BaseParameters', 'OU', 'generator_ids']
 
 progname = os.path.basename(sys.argv[0])
 generator_ids = {'IEEE14': (1,2,3,6,8), 'two-area': (1,2,3,4)}
 
 
 class BaseParameters (tables.IsDescription):
-    hw_seed = tables.Int64Col()
-    alpha   = tables.Float64Col()
-    mu      = tables.Float64Col()
-    c       = tables.Float64Col()
-    D       = tables.Float64Col()
-    DZA     = tables.Float64Col()
-    F0      = tables.Float64Col()
-    frand   = tables.Float64Col()
+    D        = tables.Float64Col()
+    DZA      = tables.Float64Col()
+    F0       = tables.Float64Col()
+    frand    = tables.Float64Col()
+    LAMBDA   = tables.Float64Col()
+    COEFF    = tables.Float64Col()
+
+
+def OU(dt, alpha, mu, c, N, random_state = None):
+    coeff = np.array([alpha * mu * dt, 1 / (1 + alpha * dt)])
+    if random_state is not None:
+        rnd = c * np.sqrt(dt) * random_state.normal(size=N)
+    else:
+        rnd = c * np.sqrt(dt) * np.random.normal(size=N)
+    ou = np.zeros(N)
+    ou[0] = mu
+    for i in range(N-1):
+        ou[i+1] = (ou[i] + coeff[0] + rnd[i]) * coeff[1]
+    return ou
 
 
 if __name__ == '__main__':
@@ -42,10 +54,6 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output-dir',  default=None,  type=str, help='output directory')
     args = parser.parse_args(args=sys.argv[1:])
     
-    with open('/dev/random', 'rb') as fid:
-        hw_seed = int.from_bytes(fid.read(4), 'little') % 1000000
-    np.random.seed(hw_seed)
-
     config_file = args.config_file
     if not os.path.isfile(config_file):
         print('{}: {}: no such file.'.format(config_file))
@@ -53,9 +61,9 @@ if __name__ == '__main__':
     config = json.load(open(config_file, 'r'))
     
     # OU parameters
-    alpha = config['alpha']
-    mu = config['mu']
-    c = config['c']
+    alpha = config['OU']['alpha']
+    mu = config['OU']['mu']
+    c = config['OU']['c']
 
     # simulation parameters
     frand = config['frand']  # [Hz] sampling rate of the random signal
@@ -85,14 +93,25 @@ if __name__ == '__main__':
     else:
         N_trials = config['Ntrials']
 
-    random_seeds = np.random.randint(low=0, high=1000000, size=(N_inertia, N_trials))
+    # buses where the stochastic loads are connected
+    random_load_buses = config['random_load_buses']
+    N_random_loads = len(random_load_buses)
+
+    # seeds for the random number generators
+    with open('/dev/random', 'rb') as fid:
+        hw_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_random_loads + 1)]
+    loads_random_states = [RandomState(MT19937(SeedSequence(seed))) for seed in hw_seeds[:-1]]
+    pan_random_state = RandomState(MT19937(SeedSequence(hw_seeds[-1])))
+    loads_random_seeds = [loads_random_state.randint(low=0, high=1000000, size=(N_inertia, N_trials)) \
+                          for loads_random_state in loads_random_states]
+    pan_random_seeds = pan_random_state.randint(low=0, high=1000000, size=(N_inertia, N_trials))
 
     dt = 1 / frand
     t = dt + np.r_[0 : tstop + dt/2 : dt]
     N_samples = t.size
-    noise_samples = np.zeros((2, N_samples))
-    noise_samples[0,:] = t
-    coeff = np.array([alpha * mu * dt, 1 / (1 + alpha * dt)])
+    for i,bus in enumerate(random_load_buses):
+        exec(f'noise_samples_bus_{bus} = np.zeros((2, N_samples))')
+        exec(f'noise_samples_bus_{bus}[0,:] = t')
 
     pan_file = config['netlist']
     if not os.path.isfile(pan_file):
@@ -102,7 +121,10 @@ if __name__ == '__main__':
     with NamedTemporaryFile(prefix = os.path.splitext(os.path.basename(pan_file))[0] + '_', \
                             suffix = '.pan', delete = False) as fid:
         for va_file in glob.glob(os.path.dirname(pan_file) + '/*.va'):
-            shutil.copy(va_file, '/tmp')
+            try:
+                shutil.copy(va_file, '/tmp')
+            except:
+                print(f'Cannot copy {va_file} to /tmp: trying to continue anyway...')
         shutil.copyfile(pan_file, fid.name)
         pan_file = fid.name
 
@@ -117,11 +139,17 @@ if __name__ == '__main__':
     D = config['D']
     # dead-band width
     DZA = config['DZA'] / F0
+    # overload coefficient
+    LAMBDA = config['lambda']
+    # load scaling coefficient
+    COEFF = config['coeff']
     
-    pan.alter('Altstop', 'TSTOP', tstop, annotate=1)
-    pan.alter('Alfrand', 'FRAND', frand, annotate=1)
-    pan.alter('Ald',     'D',     D,     annotate=1)
-    pan.alter('Aldza',   'DZA',   DZA,   annotate=1)
+    pan.alter('Altstop', 'TSTOP',  tstop,  annotate=1)
+    pan.alter('Alfrand', 'FRAND',  frand,  annotate=1)
+    pan.alter('Ald',     'D',      D,      annotate=1)
+    pan.alter('Aldza',   'DZA',    DZA,    annotate=1)
+    pan.alter('Allam',   'LAMBDA', LAMBDA, annotate=1)
+    pan.alter('Alcoeff', 'COEFF',  COEFF,  annotate=1)
 
     mem_vars_map = config['mem_vars']
     mem_vars = list(mem_vars_map.keys())
@@ -153,8 +181,16 @@ if __name__ == '__main__':
     atom = tables.Float64Atom()
 
     class Parameters (BaseParameters):
+        hw_seeds       = tables.Int64Col(shape=(N_random_loads+1,))
+        pan_seeds      = tables.Int64Col(shape=(N_trials,))
+        loads_seeds    = tables.Int64Col(shape=(N_random_loads,N_trials))
+        count          = tables.Int64Col()
+        alpha          = tables.Float64Col(shape=(N_random_loads,))
+        mu             = tables.Float64Col(shape=(N_random_loads,))
+        c              = tables.Float64Col(shape=(N_random_loads,))
+        rnd_load_buses = tables.Int64Col(shape=(N_random_loads,))
         generator_IDs  = tables.StringCol(8, shape=(N_generators,))
-        inertia = tables.Float64Col(shape=(N_generators,))
+        inertia        = tables.Float64Col(shape=(N_generators,))
 
     for i in range(N_inertia):
 
@@ -171,21 +207,28 @@ if __name__ == '__main__':
         fid = tables.open_file(out_file, 'w', filters=compression_filter)
         tbl = fid.create_table(fid.root, 'parameters', Parameters, 'parameters')
         params = tbl.row
-        params['hw_seed'] = hw_seed
-        params['alpha']   = alpha
-        params['mu']      = mu
-        params['c']       = c
-        params['D']       = D
-        params['DZA']     = DZA
-        params['F0']      = F0
-        params['frand']   = frand
+        params['hw_seeds']       = hw_seeds
+        params['pan_seeds']      = pan_random_seeds[i,:]
+        params['loads_seeds']    = np.array([load_random_seeds[i,:] for load_random_seeds in loads_random_seeds])
+        params['count']          = i
+        params['alpha']          = alpha
+        params['mu']             = mu
+        params['c']              = c
+        params['D']              = D
+        params['DZA']            = DZA
+        params['LAMBDA']         = LAMBDA
+        params['COEFF']          = COEFF
+        params['F0']             = F0
+        params['frand']          = frand
+        params['rnd_load_buses'] = random_load_buses
         params['generator_IDs']  = config['generator_IDs']
-        params['inertia'] = [inertia_values[gen_id][i] for gen_id in generator_IDs]
+        params['inertia']        = [inertia_values[gen_id][i] for gen_id in generator_IDs]
         params.append()
         tbl.flush()
 
-        fid.create_array(fid.root, 'seeds', random_seeds[i,:])
-        fid.create_earray(fid.root, 'noise', atom, (0, N_samples))
+        fid.create_array(fid.root, 'seeds', pan_random_seeds[i,:])
+        for bus in random_load_buses:
+            fid.create_earray(fid.root, f'noise_bus_{bus}', atom, (0, N_samples))
         for disk_var in mem_vars_map.values():
             if disk_var is not None:
                 if isinstance(disk_var, str) and disk_var != time_disk_var:
@@ -198,15 +241,13 @@ if __name__ == '__main__':
         for j in range(N_trials):
 
             # build the noisy samples
-            np.random.seed(random_seeds[i,j])
-            rnd = c * np.sqrt(dt) * np.random.normal(size=N_samples)
-            noise_samples[1, 0] = 0.
-            for k in range(N_samples-1):
-                noise_samples[1, k+1] = (noise_samples[1, k] + coeff[0] + rnd[k]) * coeff[1]
+            for k,bus in enumerate(random_load_buses):
+                state = RandomState(MT19937(SeedSequence(loads_random_seeds[k][i,j])))
+                exec(f'noise_samples_bus_{bus}[1, ] = OU(dt, alpha[k], mu[k], c[k], N_samples, state)')
 
             # run a transient analysis
             data = pan.tran('Tr', tstop, mem_vars, nettype=1, method=2, maxord=2, \
-                            noisefmax=frand/2, noiseinj=2, seed=random_seeds[i,j], \
+                            noisefmax=frand/2, noiseinj=2, seed=pan_random_seeds[i,j], \
                             iabstol=1e-6, devvars=1, tmax=0.1, annotate=1)
 
             # save the results to file
@@ -214,7 +255,8 @@ if __name__ == '__main__':
 
             fid = tables.open_file(out_file, 'a')
 
-            fid.root.noise.append(noise_samples[1, np.newaxis, :])
+            for bus in random_load_buses:
+                exec(f'fid.root.noise_bus_{bus}.append(noise_samples_bus_{bus}[1, np.newaxis, :])')
 
             if j == 0:
                 time = get_var(data, mem_vars, time_mem_var)

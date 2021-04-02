@@ -128,28 +128,28 @@ L1011  bus10a bus11  powerline prating=100M r=L25*RL  x=L25*XL  b=L25*BC  vratin
 //
 // Loads
 //
-;Lo7    bus7   powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
-;Lo9    bus9   powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
-Lo7    bus7       cntp powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
-Lo9    bus9       cntp powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
+Lo7    bus7   powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
+Lo9    bus9   powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
+;Lo7    bus7       cntp powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
+;Lo9    bus9       cntp powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
 
-;Pe5    bus5  d5  gnd  q5  gnd  powerec type=0
+Pe5    bus5  d5  gnd  q5  gnd  powerec type=0
 Pe8    bus8  d8  gnd  q8  gnd  powerec type=0
-;Pe11   bus11 d11 gnd  q11 gnd  powerec type=0
+Pe11   bus11 d11 gnd  q11 gnd  powerec type=0
 
 end
 
-CntLo cntp gnd vsource vsin=0.02 freq=1/(24*3600/2)
+;CntLo cntp gnd vsource vsin=0.02 freq=1/(24*3600/2)
 
 //
-// Random load(s)
+// Stochastic load(s)
 //
-;Rnd5       d5  q5   rand5  RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
-;Wav5    rand5  gnd   port noisesamples="noise_samples_bus_5"
+Rnd5       d5  q5   rand5  RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
+Wav5    rand5  gnd   port noisesamples="noise_samples_bus_5"
 Rnd8       d8  q8   rand8  RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
 Wav8    rand8  gnd   port noisesamples="noise_samples_bus_8"
-;Rnd11      d11 q11  rand11 RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
-;Wav11   rand11 gnd   port noisesamples="noise_samples_bus_11"
+Rnd11      d11 q11  rand11 RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
+Wav11   rand11 gnd   port noisesamples="noise_samples_bus_11"
 
 model RAND_L nport veriloga="randl.va" verilogaprotected=1
 
