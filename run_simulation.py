@@ -87,11 +87,15 @@ if __name__ == '__main__':
 
     D = config['damping']
     DZA = config['DZA'] / config['frequency']
+    LAMBDA = config['lambda']
+    COEFF = config['coeff']
 
-    pan.alter('Altstop', 'TSTOP', tstop, annotate=1)
-    pan.alter('Alfrand', 'FRAND', frand, annotate=1)
-    pan.alter('Ald',     'D',     D,     annotate=1)
-    pan.alter('Aldza',   'DZA',   DZA,   annotate=1)
+    pan.alter('Altstop', 'TSTOP',  tstop,  annotate=1)
+    pan.alter('Alfrand', 'FRAND',  frand,  annotate=1)
+    pan.alter('Ald',     'D',      D,      annotate=1)
+    pan.alter('Aldza',   'DZA',    DZA,    annotate=1)
+    pan.alter('Allam',   'LAMBDA', LAMBDA, annotate=1)
+    pan.alter('Alcoeff', 'COEFF',  COEFF,  annotate=1)
 
     ou = [OU(dt, alpha[i], mu[i], c[i], N_samples, rnd_states[i]) for i in range(N_random_loads)]
 
@@ -106,14 +110,16 @@ if __name__ == '__main__':
 
     class Parameters (BaseParameters):
         generator_IDs = tables.StringCol(8, shape=(N_generators,))
-        inertia = tables.Float64Col(shape=(N_generators,N_blocks))
         rnd_load_buses = tables.Int64Col(shape=(N_random_loads,))
         rng_seeds = tables.Int64Col(shape=(N_random_loads,))
         pan_seeds = tables.Int64Col(shape=(N_blocks,))
         alpha_vec = tables.Float64Col(shape=(N_random_loads,))
-        mu_vec = tables.Float64Col(shape=(N_random_loads,))
-        c_vec = tables.Float64Col(shape=(N_random_loads,))
-        tstop = tables.Float64Col(shape=(N_blocks,))
+        inertia = tables.Float64Col(shape=(N_generators,N_blocks))
+        mu_vec  = tables.Float64Col(shape=(N_random_loads,))
+        c_vec   = tables.Float64Col(shape=(N_random_loads,))
+        tstop   = tables.Float64Col(shape=(N_blocks,))
+        LAMBDA  = tables.Float64Col()
+        COEFF   = tables.Float64Col()
 
     fid = tables.open_file(output_file, 'w', filters=tables.Filters(complib='zlib', complevel=5))
     tbl = fid.create_table(fid.root, 'parameters', Parameters, 'parameters')
@@ -127,6 +133,8 @@ if __name__ == '__main__':
     params['c_vec']          = c
     params['D']              = D
     params['DZA']            = DZA
+    params['LAMBDA']         = LAMBDA
+    params['COEFF']          = COEFF
     params['F0']             = config['frequency']
     params['frand']          = frand
     params['inertia']        = inertia_values

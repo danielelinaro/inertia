@@ -5,8 +5,7 @@ parameters L25=25 L10=10 L110=110
 parameters F0=60 TSTOP=60
 parameters TYPE=4 D=2 DZA=1
 parameters PRAND=1M FRAND=10
-parameter LAMBDA=0 ; coefficient for overloading area 2
-parameter COEFF=0  ; coefficient for varying the active power of the loads in the two areas
+parameters LAMBDA=0 ; coefficient for overloading area 2
 
 options outintnodes=yes 
 
@@ -15,7 +14,6 @@ Al_dummy_frand  alter param="FRAND"  rt=yes
 Al_dummy_d      alter param="D"      rt=yes
 Al_dummy_dza    alter param="DZA"    rt=yes
 Al_dummy_lambda alter param="LAMBDA" rt=yes
-Al_dummy_coeff  alter param="COEFF"  rt=yes
 
 #ifdef PAN
 
@@ -28,17 +26,17 @@ Rnd control begin
 
 endcontrol
 
-;Dc dc nettype=yes print=yes printnodes=yes ireltol=1m vreltol=1m
-;Pz pz nettype=yes
-Tr tran stop=TSTOP nettype=yes method=2 maxord=2 noisefmax=FRAND/2 \
-        noiseinj=2 seed=12345 iabstol=1u devvars=1 tmax=0.1 
+Dc dc nettype=1 print=yes printnodes=yes ireltol=1m vreltol=1m
+Pz pz nettype=1
+;Tr tran stop=TSTOP nettype=yes method=2 maxord=2 noisefmax=FRAND/2 \
+;        noiseinj=2 seed=12345 iabstol=1u devvars=1 tmax=0.1 
 
 #endif
 
 begin power
 
 //
-// Synchronous machines, avr and tg
+// Synchronous maxchines, avr and tg
 //
 
 Tg1 pm01 omega01     powertg type=1 omegaref=1 r=0.002 pmax=1 pmin=0.0 \
@@ -128,28 +126,18 @@ L1011  bus10a bus11  powerline prating=100M r=L25*RL  x=L25*XL  b=L25*BC  vratin
 //
 // Loads
 //
-;Lo7    bus7   powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
-;Lo9    bus9   powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
-Lo7    bus7       cntp powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
-Lo9    bus9       cntp powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
+Lo7    bus7   powerload pc=0.967 qc=0.1+1*-0.2  vrating=230k prating=1G
+Lo9    bus9   powerload pc=1.767/1.3*(1+LAMBDA) qc=(0.1+1*-0.35)*(1+LAMBDA) vrating=230k prating=1G
 
-;Pe5    bus5  d5  gnd  q5  gnd  powerec type=0
 Pe8    bus8  d8  gnd  q8  gnd  powerec type=0
-;Pe11   bus11 d11 gnd  q11 gnd  powerec type=0
 
 end
 
-CntLo cntp gnd vsource vsin=0.02 freq=1/(24*3600/2)
-
 //
-// Random load(s)
+// Random load
 //
-;Rnd5       d5  q5   rand5  RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
-;Wav5    rand5  gnd   port noisesamples="noise_samples_bus_5"
-Rnd8       d8  q8   rand8  RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
-Wav8    rand8  gnd   port noisesamples="noise_samples_bus_8"
-;Rnd11      d11 q11  rand11 RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
-;Wav11   rand11 gnd   port noisesamples="noise_samples_bus_11"
+Rnd8      d8  q8    rand8  RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
+Wav8   rand8  gnd   port   noisesamples="noise_samples"
 
 model RAND_L nport veriloga="randl.va" verilogaprotected=1
 

@@ -138,7 +138,7 @@ def slide_window(X, window_size, overlap=None, window_step=None, N_windows=-1):
             break
     return Y, idx
 
-def load_data_slide(data_files, var_names, data_mean = None, data_std = None, window_dur = 60, window_step = 10, normalize_sliding=False, verbose=False):
+def load_data_slide(data_files, var_names, data_mean = None, data_std = None, window_dur = 60, window_step = 10, ttran = 0, normalize_sliding=False, verbose=False):
     fids = [tables.open_file(data_file, 'r') for data_file in data_files]
     n_files = len(data_files)
     params = fids[0].root.parameters.read()
@@ -150,14 +150,15 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
     for i in range(1, n_files):
         time.append(fids[i].root.time.read() + time[i-1][-1])
     time = np.concatenate(time)
+    idx = time > ttran
     N_samples = time.size
     data = {var_name: np.concatenate([fid.root[var_name] for fid in fids]) for var_name in var_names}
     if not normalize_sliding:
         if data_mean is None:
-            data_mean = {var_name: np.mean(data[var_name]) for var_name in var_names}
+            data_mean = {var_name: np.mean(data[var_name][idx]) for var_name in var_names}
             print(f'data_mean = {data_mean}')
         if data_std is None:
-            data_std = {var_name: np.std(data[var_name]) for var_name in var_names}
+            data_std = {var_name: np.std(data[var_name][idx]) for var_name in var_names}
             print(f'data_std = {data_std}')
         data_normalized = {var_name: (data[var_name] - data_mean[var_name]) / data_std[var_name] for var_name in var_names}
         data_to_split = data_normalized

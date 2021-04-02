@@ -6,16 +6,18 @@
 	"G3": [6.175, 6.175],
 	"G4": [6.175, 6.175]
     },
-    "random_load_buses": [5, 8, 11],
+    "random_load_buses": [8],
     "OU": {
-	"alpha": [0.5, 0.5, 0.5],
-	"mu": [0.0, 0.0, 0.0],
-	"c": [0.0, 0.5, 0.0]
+	"alpha": [0.5],
+	"mu": [0.0],
+	"c": [0.5]
     },
     "damping": 2,
     "DZA": 60.0,
     "frand": 10.0,
     "frequency": 60.0,
+    "lambda": 0.0,
+    "coeff": 0.0,
     "tstop": [21600, 43200],
     "mem_vars_map" : {
 	"time:noise": "time",
