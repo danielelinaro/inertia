@@ -91,51 +91,54 @@ G4       g4   ex4 pm04 omega04 powergenerator vg=1 type=TYPE omegab=F0*2*pi \
 		    d=D m=2*6.175 
 
 //
-// Measure the power flowing at buses 7 and 9
+// Measure the power flowing at buses 6, 7, 9 and 10
 //
-Pec1 bus6a  pe7 gnd qe7 gnd bus6b  powerec type=4
-Pec2 bus10a pe9 gnd qe9 gnd bus10b powerec type=4
+Pec1 bus6a  pe6  gnd qe6  gnd bus6b  powerec type=4
+Pec2 bus7a  pe7  gnd qe7  gnd bus7b  powerec type=4
+Pec3 bus9a  pe9  gnd qe9  gnd bus9b  powerec type=4
+Pec4 bus10a pe10 gnd qe10 gnd bus10b powerec type=4
 
 //
-// Measure the electrical angular frequency at buses 7 and 9
+// Measure the electrical angular frequency at buses 6, 7, 9 and 10
 //
-Pec3 bus7 omegael07 gnd powerec type=2
-Pec4 bus9 omegael09 gnd powerec type=2
+Pec5 bus6a  omegael06 gnd powerec type=2
+Pec6 bus7a  omegael07 gnd powerec type=2
+Pec7 bus9a  omegael09 gnd powerec type=2
+Pec8 bus10a omegael10 gnd powerec type=2
 
 //
 // Transformers connecting machine to busses
 //
-T15      g1  bus5  powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
-T26      g2 bus6a  powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
-T311     g3 bus11  powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
-T410     g4 bus10a powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
+T15      g1  bus5   powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
+T26      g2  bus6a  powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
+T311     g3  bus11  powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
+T410     g4  bus10a powertransformer kt=230/20 x=0.15/11 vrating=20k prating=900M
 
 //
 // Lines 
 //
-L56    bus5  bus6a powerline prating=100M r=L25*RL x=L25*XL b=L25*BC vrating=230k
-L67    bus6b  bus7 powerline prating=100M r=L10*RL x=L10*XL b=L10*BC vrating=230k
+L56    bus5   bus6a  powerline prating=100M r=L25*RL x=L25*XL b=L25*BC vrating=230k
+L67    bus6b  bus7a  powerline prating=100M r=L10*RL x=L10*XL b=L10*BC vrating=230k
+L910   bus9a  bus10b powerline prating=100M r=L10*RL x=L10*XL b=L10*BC vrating=230k
+L1011  bus10a bus11  powerline prating=100M r=L25*RL x=L25*XL b=L25*BC vrating=230k
 
 // 
 // Lines connecting the two areas
 //
-
-L78    bus7   bus8   powerline prating=100M r=L110*RL x=L110*XL b=L110*BC vrating=230k 
-L89    bus8   bus9   powerline prating=100M r=L110*RL x=L110*XL b=L110*BC vrating=230k
-L910   bus9   bus10b powerline prating=100M r=L10*RL  x=L10*XL  b=L10*BC  vrating=230k
-L1011  bus10a bus11  powerline prating=100M r=L25*RL  x=L25*XL  b=L25*BC  vrating=230k
+L78    bus7b  bus8   powerline prating=100M r=L110*RL x=L110*XL b=L110*BC vrating=230k 
+L89    bus8   bus9b  powerline prating=100M r=L110*RL x=L110*XL b=L110*BC vrating=230k
 
 //
 // Loads
 //
-Lo7    bus7   powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
-Lo9    bus9   powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
-;Lo7    bus7       cntp powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
-;Lo9    bus9       cntp powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
+Lo7    bus7a  powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
+Lo9    bus9a  powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
+;Lo7    bus7a      cntp powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
+;Lo9    bus9a      cntp powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
 
-Pe5    bus5  d5  gnd  q5  gnd  powerec type=0
-Pe8    bus8  d8  gnd  q8  gnd  powerec type=0
-Pe11   bus11 d11 gnd  q11 gnd  powerec type=0
+;Pec9    bus5  d5  gnd  q5  gnd  powerec type=0
+Pec10   bus8  d8  gnd  q8  gnd  powerec type=0
+;Pec11   bus11 d11 gnd  q11 gnd  powerec type=0
 
 end
 
@@ -144,12 +147,12 @@ end
 //
 // Stochastic load(s)
 //
-Rnd5       d5  q5   rand5  RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
-Wav5    rand5  gnd   port noisesamples="noise_samples_bus_5"
+;Rnd5       d5  q5   rand5  RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
 Rnd8       d8  q8   rand8  RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
-Wav8    rand8  gnd   port noisesamples="noise_samples_bus_8"
-Rnd11      d11 q11  rand11 RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
-Wav11   rand11 gnd   port noisesamples="noise_samples_bus_11"
+;Rnd11      d11 q11  rand11 RAND_L P=PRAND VRATING=230k VMAX=1.2*230k VMIN=0.8*230k
+;Wav5    rand5  gnd  port noisesamples="noise_samples_bus_5"
+Wav8    rand8  gnd  port noisesamples="noise_samples_bus_8"
+;Wav11   rand11 gnd  port noisesamples="noise_samples_bus_11"
 
 model RAND_L nport veriloga="randl.va" verilogaprotected=1
 

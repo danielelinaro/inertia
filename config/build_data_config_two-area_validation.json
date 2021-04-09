@@ -6,11 +6,11 @@
 	"G3": [6.175],
 	"G4": [6.175]
     },
-    "random_load_buses": [5, 8, 11],
+    "random_load_buses": [8],
     "OU": {
-	"alpha": [0.5, 0.5, 0.5],
-	"mu": [0.0, 0.0, 0.0],
-	"c": [0.1, 0.5, 0.1]
+	"alpha": [0.5],
+	"mu": [0.0],
+	"c": [0.5]
     },
     "D": 2,
     "DZA": 60.0,
@@ -23,11 +23,13 @@
     "netlist": "pan/two-area.pan",
     "mem_vars": {
 	"time:noise": "time",
+	"omegael06:noise": "omegael_bus6",
 	"omegael07:noise": "omegael_bus7",
 	"omegael09:noise": "omegael_bus9",
+	"omegael10:noise": "omegael_bus10",
+	"pe6:noise": "Pe_bus6",
 	"pe7:noise": "Pe_bus7",
-	"qe7:noise": "Qe_bus7",
 	"pe9:noise": "Pe_bus9",
-	"qe9:noise": "Qe_bus9"
+	"pe10:noise": "Pe_bus10"
     }
 }
