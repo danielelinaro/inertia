@@ -1,0 +1,35 @@
+module AVR(d,q,fd);
+input d,q;
+output fd;
+
+electrical d,q,fd;
+electrical x, z;
+
+parameter real TA = 10;
+parameter real TB = 20;
+parameter real G  = 70;
+parameter real V0 = 1;
+
+real Vo, Vf, Abs, Out;
+
+analog begin
+
+    Abs = sqrt( v(d)*v(d) + v(q)*v(q) );
+
+    if( analysis( "dc" ) ) begin
+	 Vo = Abs;
+	 Vf = v(fd);
+    end
+
+    i(x) <+ TB*ddt( v(x) ) + v(x) - G*(Vo-Abs);
+
+    Out = (Vo - Abs - v(x))/TB*TA + v(x);
+
+    i(z) <+ ddt( v(z) ) + 10*(v(z) - Out);
+
+    if( ! analysis( "dc" ) )
+	v(fd) <+ v(z) + Vf;
+    
+end
+
+endmodule

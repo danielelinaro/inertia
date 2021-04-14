@@ -1,0 +1,44 @@
+module HTG(omega,pm);
+input omega;
+output pm;
+
+electrical omega;
+electrical pm;
+electrical z,q,o;
+
+parameter real OMEGA = 1.0;
+parameter real KP    = 2.0;
+parameter real KI    = 0.4;
+parameter real HS    = 1.0;
+parameter real TW    = 1.0;
+
+real OmegaErr, PiOut;
+integer Reset;
+
+analog begin
+
+    if( analysis( "dc" ) ) begin
+        v(z) <+ v(pm);
+        v(q) <+ v(pm);
+	Reset = 1;
+    end
+
+    @( initial_step( "tran" ) )
+        Reset = 0;
+
+    OmegaErr = OMEGA - v(omega);
+    PiOut    = KP * OmegaErr + idt( KI*OmegaErr, v(pm), Reset );
+
+    if( ! analysis( "dc" ) ) begin
+	i(z) <+ 5*(PiOut - v(z)) - ddt(v(z));
+	i(q) <+ (v(z)*v(z)*HS - pow(v(q),2)) - v(z)*v(z)*TW*ddt(v(q));
+    end
+
+    i(o) <+ v(o)*v(z)*v(z) - pow(v(q),3);
+
+    if( ! analysis( "dc" ) )
+	v(pm) <+ max(0,v(o)); 
+
+end
+
+endmodule

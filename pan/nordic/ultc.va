@@ -1,0 +1,83 @@
+module ULTC(vp,vq,tap);
+input vp,vq;
+output tap;
+
+electrical vp,vq;
+electrical tap;
+
+parameter real STEP = (1.2-0.88)/33;
+parameter real TAP  = 1.0;
+parameter real BAND = 0.01;
+parameter real TW   = 30;
+
+real Vref, Vmag, TstartUp, TstartLow, Tap;
+integer Upper, Lower;
+
+analog begin
+
+    @( initial_model ) begin
+	    Tap   = 1.0;
+	    Upper = 0;
+	    Lower = 10;
+    end
+
+    if( analysis( "tran" ) ) begin
+
+	Vmag = sqrt( v(vp)*v(vp) + v(vq)*v(vq) );
+
+        @( initial_step ) begin
+	    Vref  = Vmag;
+	    Tap   = TAP;
+	    Upper = 0;
+	    Lower = 0;
+	end
+
+	if( Upper == 0 )
+	    @( cross( Vmag - (TAP+BAND) * Vref, +1, 1u ) ) begin
+		TstartUp = $abstime;
+		Upper  = 1;
+	    end
+
+	if( Upper == 1 && $abstime > TstartUp + 1m )
+	@( cross( Vmag - (TAP+BAND) * Vref, -1, 1u ) )
+	    Upper = 0;
+
+	if( Lower == 0 )
+	    @( cross( Vmag - (TAP-BAND) * Vref, -1, 1u ) ) begin
+		TstartLow = $abstime;
+		Lower  = 1;
+//		$display( "Time: %e Lower = 1\n", $abstime );
+	    end
+
+	if( Upper == 1 && $abstime > TstartLow + 1m )
+	    @( cross( Vmag - (TAP-BAND) * Vref, +1, 1u ) ) begin
+		Lower = 0;
+//		$display( "Time: %e Lower = 0\n", $abstime );
+	    end
+
+        if( Upper == 1 ) begin
+            if( $abstime > TstartUp + TW ) begin
+		Tap = Tap + STEP;
+		if( Vmag < (TAP+BAND) * Vref ) Upper = 0;
+
+//		$display( "Time: %e TstartUp: %e Upper -- Tap: %e\n", $abstime, TstartUp, Tap );
+		TstartUp = $abstime;
+	    end
+	end
+
+        if( Lower == 1 ) begin
+            if( $abstime > TstartLow + TW ) begin
+		Tap = Tap - STEP;
+		if( Vmag > (TAP-BAND) * Vref ) Lower = 0;
+
+//		$display( "Time: %e TstartLow: %e Lower -- Tap: %e\n", $abstime, TstartLow, Tap );
+		TstartLow = $abstime;
+	    end
+	end
+    end
+
+    v(tap) <+ Tap;
+    
+end
+
+endmodule
