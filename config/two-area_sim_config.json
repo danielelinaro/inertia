@@ -25,13 +25,13 @@
 	"omegael07:noise": "omegael_bus7",
 	"omegael09:noise": "omegael_bus9",
 	"omegael10:noise": "omegael_bus10",
+	"deltael06:noise": "deltael_bus6",
+	"deltael07:noise": "deltael_bus7",
+	"deltael09:noise": "deltael_bus9",
+	"deltael10:noise": "deltael_bus10",
 	"pe6:noise": "Pe_bus6",
-	"qe6:noise": "Qe_bus6",
 	"pe7:noise": "Pe_bus7",
-	"qe7:noise": "Qe_bus7",
 	"pe9:noise": "Pe_bus9",
-	"qe9:noise": "Qe_bus9",
-	"pe10:noise": "Pe_bus10",
-	"qe10:noise": "Qe_bus10"
+	"pe10:noise": "Pe_bus10"
     }
 }

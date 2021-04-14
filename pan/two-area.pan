@@ -99,12 +99,16 @@ Pec3 bus9a  pe9  gnd qe9  gnd bus9b  powerec type=4
 Pec4 bus10a pe10 gnd qe10 gnd bus10b powerec type=4
 
 //
-// Measure the electrical angular frequency at buses 6, 7, 9 and 10
+// Measure the electrical angular frequency and phase angles at buses 6, 7, 9 and 10
 //
-Pec5 bus6a  omegael06 gnd powerec type=2
-Pec6 bus7a  omegael07 gnd powerec type=2
-Pec7 bus9a  omegael09 gnd powerec type=2
-Pec8 bus10a omegael10 gnd powerec type=2
+Pec5  bus6a  omegael06 gnd powerec type=2
+Pec6  bus7a  omegael07 gnd powerec type=2
+Pec7  bus9a  omegael09 gnd powerec type=2
+Pec8  bus10a omegael10 gnd powerec type=2
+Pec9  bus6a  deltael06 gnd powerec type=1
+Pec10 bus7a  deltael07 gnd powerec type=1
+Pec11 bus9a  deltael09 gnd powerec type=1
+Pec12 bus10a deltael10 gnd powerec type=1
 
 //
 // Transformers connecting machine to busses
@@ -136,9 +140,9 @@ Lo9    bus9a  powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vr
 ;Lo7    bus7a      cntp powerload pc=0.967*(1+COEFF)                qc=-0.1             vrating=230k prating=1G
 ;Lo9    bus9a      cntp powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vrating=230k prating=1G
 
-;Pec9    bus5  d5  gnd  q5  gnd  powerec type=0
-Pec10   bus8  d8  gnd  q8  gnd  powerec type=0
-;Pec11   bus11 d11 gnd  q11 gnd  powerec type=0
+;Pec13   bus5  d5  gnd  q5  gnd  powerec type=0
+Pec14   bus8  d8  gnd  q8  gnd  powerec type=0
+;Pec15   bus11 d11 gnd  q11 gnd  powerec type=0
 
 end
 
