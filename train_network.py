@@ -351,7 +351,19 @@ if __name__ == '__main__':
     except:
         max_block_size = np.inf
 
-    time, x, y = load_data_two_area(data_files, var_names, max_block_size)
+    if entity_name == 'area':
+        time, x, y = load_data_areas(data_files,
+                                     var_names,
+                                     config['generators_areas_map'],
+                                     config['generators_Pnom'],
+                                     config['area_inertia'],
+                                     max_block_size)
+    else:
+        print('This part is not implemented yet')
+        # call load_data_generators in deep_utils
+        import ipdb
+        ipdb.set_trace()
+
     N_vars, N_training_traces, N_samples = x['training'].shape
 
     # we always compute mean and std of the training set, whether we'll be using them or not

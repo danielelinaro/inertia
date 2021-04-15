@@ -1,0 +1,42 @@
+{
+    "generator_IDs": ["Pg30", "Pg31", "Pg32", "Pg33", "Pg34",
+            "Pg35", "Pg36", "Pg37", "Pg38", "Pg39"],
+    "inertia": {
+	"Pg30": [250.0],
+	"Pg31": [13, 17, 21],
+	"Pg32": [16, 19, 22],
+	"Pg33": [14.3],
+	"Pg34": [13.0],
+	"Pg35": [17.4],
+	"Pg36": [13.2],
+	"Pg37": [12.15],
+	"Pg38": [17.25],
+	"Pg39": [18, 22, 26]
+    },
+    "random_load_buses": [8, 21, 26],
+    "OU": {
+	"alpha": [0.5, 0.5, 0.5],
+	"mu": [0.0, 0.0, 0.0],
+	"c": [0.5, 0.5, 0.5]
+    },
+    "D": 2,
+    "DZA": 60.0,
+    "dur": 300.0,
+    "Ntrials": 10,
+    "F0": 60.0,
+    "frand": 10.0,
+    "lambda": 0.0,
+    "coeff": 0.0,
+    "netlist": "pan/ieee39.pan",
+    "mem_vars": {
+	"time:noise": "time",
+	"omegael03:noise": "omegael_bus3",
+	"omegael14:noise": "omegael_bus14",
+	"omegael17:noise": "omegael_bus17",
+	"omegael39:noise": "omegael_bus39",
+	"pe3:noise": "Pe_bus3",
+	"pe14:noise": "Pe_bus14",
+	"pe17:noise": "Pe_bus17",
+	"pe39:noise": "Pe_bus39"
+    }
+}

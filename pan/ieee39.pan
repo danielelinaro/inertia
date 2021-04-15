@@ -1,6 +1,6 @@
 ground electrical gnd
 
-parameter PRAND=1M
+parameter PRAND=5M
 parameter TSTOP=600
 parameter FRAND=10
 parameter D=0
@@ -307,11 +307,11 @@ Pec11 bus26 d26 gnd q26 gnd powerec type=0
 
 end
 
-Rnd8 d8 q8 rand8  RAND_L P=PRAND VRATING=1k VMAX=1.2*345k VMIN=0.8*345k
+Rnd8 d8 q8 rand8  RAND_L P=PRAND VRATING=1k VMAX=1.2*1k VMIN=0.8*1k
 Wav8 rand8 gnd port noisesamples="noise_samples_bus_8"
-Rnd21 d21 q21 rand21  RAND_L P=PRAND VRATING=1k VMAX=1.2*345k VMIN=0.8*345k
+Rnd21 d21 q21 rand21  RAND_L P=PRAND VRATING=1k VMAX=1.2*1k VMIN=0.8*1k
 Wav21 rand21 gnd port noisesamples="noise_samples_bus_21"
-Rnd26 d26 q26 rand26  RAND_L P=PRAND VRATING=1k VMAX=1.2*345k VMIN=0.8*345k
+Rnd26 d26 q26 rand26  RAND_L P=PRAND VRATING=1k VMAX=1.2*1k VMIN=0.8*1k
 Wav26 rand26 gnd port noisesamples="noise_samples_bus_26"
 
 model RAND_L nport veriloga="randl.va" verilogaprotected=1

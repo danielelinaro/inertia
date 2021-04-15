@@ -5,7 +5,7 @@ import tables
 import numpy as np
 
 
-__all__ = ['load_one_block', 'load_data', 'load_data_two_area', 'load_data_slide', 'predict', 'slide_window']
+__all__ = ['load_one_block', 'load_data_areas', 'load_data_generators', 'load_data_slide', 'predict', 'slide_window']
 
 default_H = {
     'IEEE14': {
@@ -23,6 +23,7 @@ default_H = {
     }
 }
 
+
 def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, dtype = np.float32):
     """
     This function loads a single data file containing the results of the simulations for one value of inertia
@@ -35,6 +36,7 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, d
     X = [fid.root[var_name].read(stop=np.min([fid.root[var_name].shape[0], max_num_rows])) for var_name in var_names]
     pars = fid.root.parameters.read()
     inertia = pars['inertia'][0]
+    generator_IDs = [gen_ID.decode('utf-8') for gen_ID in pars['generator_IDs'][0]]
     fid.close()
 
     dt = np.diff(time[:2])[0]
@@ -44,27 +46,35 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, d
     time = time[:n_samples]
     X = np.array([np.reshape(x, [n_trials, n_samples], order='C') for x in X], dtype=dtype)
 
-    return time.astype(dtype), X, inertia
+    return time.astype(dtype), X, inertia, generator_IDs
 
 
-def load_data_two_area(data_files, var_names, max_block_size = np.inf, dtype = np.float32, use_tf = True):
+def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_inertia,
+                    max_block_size = np.inf, dtype = np.float32, use_tf = True):
     # Note: dtype should be a NumPy type, even if use_tf = True
     X = {}
     Y = {}
 
+    if area_inertia.lower() not in ('energy', 'coi'):
+        raise Exception('area_inertia must be one of "energy" or "COI"')
+
+    n_areas = len(generators_areas_map)
     for key in data_files:
         for data_file in data_files[key]:
-            time, x, h = load_one_block(data_file, var_names, 60, max_block_size, dtype)
-            if h.size != 4:
-                raise Exception('Are you using a two-area network???')
-            # in the following we assume that the first two generators are in area 1
-            # and the other two are in area 2
-            # take the mean inertia
-            #y = np.tile(np.array([h[:2].mean(), h[2:].mean()]), [x.shape[1], 1])
-            # take the sum of each inertia multiplied by the nominal power of each generator
-            # and divide by 1e9: in the original two-area network, each generator has a nominal
-            # power of 1 GW.
-            y = np.tile(np.array([h[:2].sum(), h[2:].sum()]), [x.shape[1], 1])
+            time, x, h, generator_IDs = load_one_block(data_file, var_names, 60, max_block_size, dtype)
+            y = np.zeros(n_areas, dtype=dtype)
+            for i,area_generators in enumerate(generators_areas_map):
+                num = 0
+                den = 0
+                for gen_ID in area_generators:
+                    idx = generator_IDs.index(gen_ID)
+                    num += h[idx] * generators_Pnom[gen_ID]
+                    den += generators_Pnom[gen_ID]
+                if area_inertia.lower() == 'energy':
+                    y[i] = num * 1e-9         # [GW s]
+                elif area_inertia.lower() == 'coi':
+                    y[i] = num / den * 1e-9   # [s]
+            y = np.tile(y, [x.shape[1], 1])
             try:
                 X[key] = np.concatenate((X[key], x), axis=1)
                 Y[key] = np.concatenate((Y[key], y), axis=0)
@@ -81,7 +91,8 @@ def load_data_two_area(data_files, var_names, max_block_size = np.inf, dtype = n
     return time, X, Y
 
 
-def load_data(folders, generator_IDs, inertia_values, var_names, max_block_size = np.inf, dtype = np.float32, use_tf = True):
+def load_data_generators(folders, generator_IDs, inertia_values, var_names,
+                         max_block_size = np.inf, dtype = np.float32, use_tf = True):
     # Note: dtype should be a NumPy type, even if use_tf = True
 
     X = {}

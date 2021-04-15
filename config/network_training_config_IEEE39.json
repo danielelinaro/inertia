@@ -1,14 +1,17 @@
 {
-    "area_IDs": [1, 2],
+    "area_IDs": [1],
     "generators_areas_map": [
-	["G1", "G2"],
-	["G3", "G4"]
+	["Pg31", "Pg32", "Pg39"]
     ],
-    "generators_Pnom": {"G1": 1e9, "G2": 1e9, "G3": 1e9, "G4": 1e9},
+    "generators_Pnom": {
+	"Pg30": 100e6, "Pg31": 100e6, "Pg32": 100e6, "Pg33": 100e6, "Pg34": 100e6,
+	"Pg35": 100e6, "Pg36": 100e6, "Pg37": 100e6, "Pg38": 100e6, "Pg39": 100e6
+    },
     "area_inertia": "energy",
-    "data_dirs": ["data/two-area/var_H_area_{}/two-area_D=2_DZA=60.0"],
-    "var_names": ["omegael_bus7", "Pe_bus7", "omegael_bus9", "Pe_bus9"],
-    "max_block_size": 250,
+    "data_dirs": ["data/IEEE39/var_H_area_{}/IEEE39_D=2_DZA=60.0"],
+    "var_names": ["omegael_bus3", "Pe_bus3", "omegael_bus14", "Pe_bus14",
+                "omegael_bus17", "Pe_bus17", "omegael_bus39", "Pe_bus39"],
+    "max_block_size": 20,
     "normalization": "training_set",
     "model_arch": {
 	"N_dims": 1,
@@ -65,6 +68,6 @@
 	    "min_learning_rate": 1e-7
 	}
     },
-    "N_epochs": 1000,
+    "N_epochs": 10,
     "batch_size": 128
 }
