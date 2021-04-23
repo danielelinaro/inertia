@@ -2,15 +2,15 @@
     "pan_file": "pan/ieee39.pan",
     "inertia": {
 	"Pg30": [250.0],
-	"Pg31": [15.15],
-	"Pg32": [17.9],
+	"Pg31": [17],
+	"Pg32": [20],
 	"Pg33": [14.3],
 	"Pg34": [13.0],
 	"Pg35": [17.4],
 	"Pg36": [13.2],
 	"Pg37": [12.15],
 	"Pg38": [17.25],
-	"Pg39": [21.0]
+	"Pg39": [23.0]
     },
     "random_load_buses": [8, 21, 26],
     "OU": {
@@ -24,7 +24,7 @@
     "frequency": 60.0,
     "lambda": 0.0,
     "coeff": 0.0,
-    "tstop": [300],
+    "tstop": [1800],
     "mem_vars_map" : {
 	"time:noise": "time",
 	"omegael03:noise": "omegael_bus3",
