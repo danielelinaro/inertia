@@ -9,8 +9,8 @@
     },
     "area_inertia": "energy",
     "data_dirs": ["data/IEEE39/var_H_area_{}/IEEE39_D=2_DZA=60.0"],
-    "var_names": ["omegael_bus39", "Pe_bus39"],
-    "max_block_size": 250,
+    "var_names": ["omegael_bus14", "Pe_bus14", "omegael_bus39", "Pe_bus39"],
+    "max_block_size": 500,
     "normalization": "training_set",
     "model_arch": {
 	"N_dims": 1,

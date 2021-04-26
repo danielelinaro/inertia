@@ -450,6 +450,11 @@ if __name__ == '__main__':
                 experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs']]))
             else:
                 experiment.add_tag('_'.join([f'G{gen_id}' for gen_id in config['generator_IDs']]))
+        elif 'IEEE39' in config['data_dirs'][0]:
+            bus_names = np.unique([int(re.findall('\d+', var_name)[0]) for var_name in config['var_names']])
+            experiment.add_tag('IEEE39')
+            experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs']]))
+            experiment.add_tag('buses_' + '-'.join([str(bus_name) for bus_name in bus_names]))
         experiment.add_tag(str(config['model_arch']['N_dims']) + 'D_pipeline')
         D = int(re.findall('D=\d', config['data_dirs'][0])[0].split('=')[1])
         DZA = float(re.findall('DZA=\d+.\d+', config['data_dirs'][0])[0].split('=')[1])

@@ -77,15 +77,36 @@ if __name__ == '__main__':
     N_generators = len(generator_IDs)
 
     # inertia values
-    inertia = config['inertia']
-    inertia_values = []
-    for gen_id in generator_IDs:
-        inertia_values.append(inertia[gen_id])
-    H = np.meshgrid(*inertia_values)
-    inertia_values = {}
-    for i,gen_id in enumerate(generator_IDs):
-        inertia_values[gen_id] = H[i].flatten()
-    N_inertia = inertia_values[generator_IDs[0]].size
+    try:
+        inertia_mode = config['inertia_mode']
+    except:
+        inertia_mode = 'combinatorial'
+    if inertia_mode == 'combinatorial':
+        inertia = config['inertia']
+        inertia_values = []
+        for gen_id in generator_IDs:
+            inertia_values.append(inertia[gen_id])
+        H = np.meshgrid(*inertia_values)
+        inertia_values = {}
+        for i,gen_id in enumerate(generator_IDs):
+            inertia_values[gen_id] = H[i].flatten()
+        N_inertia = inertia_values[generator_IDs[0]].size
+    elif inertia_mode == 'sequential':
+        inertia_values = config['inertia'].copy()
+        N_inertia = 1
+        for v in inertia_values.values():
+            if len(v) > N_inertia:
+                N_inertia = len(v)
+        for k in inertia_values:
+            N_values = len(inertia_values[k])
+            if N_values == 1:
+                inertia_values[k] = inertia_values[k][0] + np.zeros(N_inertia)
+            elif N_values != N_inertia:
+                raise Exception(f'The number of inertia values for generator "{k}" does not match the other generators')
+    else:
+        print(f'Unknown value for inertia_mode: "{inertia_mode}".')
+        print('Accepted values are: "combinatorial" and "sequential".')
+        sys.exit(1)
 
     # how many trials per inertia value
     if args.n_trials is not None:
