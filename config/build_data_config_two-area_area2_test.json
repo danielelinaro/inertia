@@ -1,10 +1,10 @@
 {
-    "pan_file": "pan/two-area.pan",
+    "generator_IDs": ["G1", "G2", "G3", "G4"],
     "inertia": {
 	"G1": [6.5],
 	"G2": [6.5],
-	"G3": [6.175],
-	"G4": [6.175]
+	"G3": [2.333333, 4.333333, 6.333333, 8.333333, 10.333333, 12.333333],
+	"G4": [2.333333, 4.333333, 6.333333, 8.333333, 10.333333, 12.333333]
     },
     "random_load_buses": [8],
     "OU": {
@@ -12,23 +12,21 @@
 	"mu": [0.0],
 	"c": [0.5]
     },
-    "damping": 2,
+    "D": 2,
     "DZA": 60.0,
+    "dur": 300.0,
+    "Ntrials": 100,
+    "F0": 60.0,
     "frand": 10.0,
-    "frequency": 60.0,
     "lambda": 0.0,
     "coeff": 0.0,
-    "tstop": [3600],
-    "mem_vars_map" : {
+    "netlist": "pan/two-area.pan",
+    "mem_vars": {
 	"time": "time",
 	"omegael06": "omegael_bus6",
 	"omegael07": "omegael_bus7",
 	"omegael09": "omegael_bus9",
 	"omegael10": "omegael_bus10",
-	"deltael06": "deltael_bus6",
-	"deltael07": "deltael_bus7",
-	"deltael09": "deltael_bus9",
-	"deltael10": "deltael_bus10",
 	"pe6": "Pe_bus6",
 	"pe7": "Pe_bus7",
 	"pe9": "Pe_bus9",

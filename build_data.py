@@ -13,7 +13,7 @@ import tables
 
 import pypan.ui as pan
 
-__all__ = ['BaseParameters', 'OU', 'generator_ids']
+__all__ = ['BaseParameters', 'OU', 'OU_TH', 'generator_ids']
 
 progname = os.path.basename(sys.argv[0])
 generator_ids = {'IEEE14': (1,2,3,6,8), 'two-area': (1,2,3,4)}
@@ -38,6 +38,19 @@ def OU(dt, alpha, mu, c, N, random_state = None):
     ou[0] = mu
     for i in range(N-1):
         ou[i+1] = (ou[i] + coeff[0] + rnd[i]) * coeff[1]
+    return ou
+
+
+def OU_TH(dt, alpha, mu, c, N, random_state = None):
+    t = np.arange(N) * dt
+    ex = np.exp(-alpha * t)
+    if random_state is not None:
+        rnd = random_state.normal(size=N-1)
+    else:
+        rnd = np.random.normal(size=N-1)
+    ou0 = 0
+    tmp = np.cumsum(np.r_[0, np.sqrt(np.diff(np.exp(2 * alpha * t) - 1)) * rnd])
+    ou = ou0 * ex + mu * (1 - ex) + c * ex * tmp / np.sqrt(2 * alpha);
     return ou
 
 
@@ -120,12 +133,9 @@ if __name__ == '__main__':
 
     # seeds for the random number generators
     with open('/dev/random', 'rb') as fid:
-        hw_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_random_loads + 1)]
-    loads_random_states = [RandomState(MT19937(SeedSequence(seed))) for seed in hw_seeds[:-1]]
-    pan_random_state = RandomState(MT19937(SeedSequence(hw_seeds[-1])))
-    loads_random_seeds = [loads_random_state.randint(low=0, high=1000000, size=(N_inertia, N_trials)) \
-                          for loads_random_state in loads_random_states]
-    pan_random_seeds = pan_random_state.randint(low=0, high=1000000, size=(N_inertia, N_trials))
+        hw_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_random_loads)]
+    random_states = [RandomState(MT19937(SeedSequence(seed))) for seed in hw_seeds]
+    seeds = [rs.randint(low=0, high=1000000, size=(N_inertia, N_trials)) for rs in random_states]
 
     dt = 1 / frand
     t = dt + np.r_[0 : tstop + dt/2 : dt]
@@ -202,9 +212,8 @@ if __name__ == '__main__':
     atom = tables.Float64Atom()
 
     class Parameters (BaseParameters):
-        hw_seeds       = tables.Int64Col(shape=(N_random_loads+1,))
-        pan_seeds      = tables.Int64Col(shape=(N_trials,))
-        loads_seeds    = tables.Int64Col(shape=(N_random_loads,N_trials))
+        hw_seeds       = tables.Int64Col(shape=(N_random_loads,))
+        seeds          = tables.Int64Col(shape=(N_random_loads,N_trials))
         count          = tables.Int64Col()
         alpha          = tables.Float64Col(shape=(N_random_loads,))
         mu             = tables.Float64Col(shape=(N_random_loads,))
@@ -229,8 +238,7 @@ if __name__ == '__main__':
         tbl = fid.create_table(fid.root, 'parameters', Parameters, 'parameters')
         params = tbl.row
         params['hw_seeds']       = hw_seeds
-        params['pan_seeds']      = pan_random_seeds[i,:]
-        params['loads_seeds']    = np.array([load_random_seeds[i,:] for load_random_seeds in loads_random_seeds])
+        params['seeds']          = np.array([s[i,:] for s in seeds])
         params['count']          = i
         params['alpha']          = alpha
         params['mu']             = mu
@@ -247,15 +255,14 @@ if __name__ == '__main__':
         params.append()
         tbl.flush()
 
-        fid.create_array(fid.root, 'seeds', pan_random_seeds[i,:])
         for bus in random_load_buses:
             fid.create_earray(fid.root, f'noise_bus_{bus}', atom, (0, N_samples))
         for disk_var in mem_vars_map.values():
             if disk_var is not None:
                 if isinstance(disk_var, str) and disk_var != time_disk_var:
-                    fid.create_earray(fid.root, disk_var, atom, (0, N_samples-1))
+                    fid.create_earray(fid.root, disk_var, atom, (0, N_samples))
                 elif isinstance(disk_var, list):
-                    fid.create_earray(fid.root, disk_var[0], atom, (0, N_samples-1))
+                    fid.create_earray(fid.root, disk_var[0], atom, (0, N_samples))
         # close the file so that other programs can read it
         fid.close()
 
@@ -263,13 +270,12 @@ if __name__ == '__main__':
 
             # build the noisy samples
             for k,bus in enumerate(random_load_buses):
-                state = RandomState(MT19937(SeedSequence(loads_random_seeds[k][i,j])))
-                exec(f'noise_samples_bus_{bus}[1, ] = OU(dt, alpha[k], mu[k], c[k], N_samples, state)')
+                state = RandomState(MT19937(SeedSequence(seeds[k][i,j])))
+                exec(f'noise_samples_bus_{bus}[1,:] = OU(dt, alpha[k], mu[k], c[k], N_samples, state)')
 
             # run a transient analysis
-            data = pan.tran('Tr', tstop, mem_vars, nettype=1, method=2, maxord=2, \
-                            noisefmax=frand/2, noiseinj=2, seed=pan_random_seeds[i,j], \
-                            iabstol=1e-6, devvars=1, tmax=0.1, annotate=1)
+            data = pan.tran('Tr', tstop, mem_vars, nettype=1, method=1,
+                            timepoints=1/frand, forcetps=1, maxiter=65)
 
             # save the results to file
             get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]

@@ -130,9 +130,9 @@ if __name__ == '__main__':
     for disk_var in mem_vars_map.values():
         if disk_var is not None:
             if isinstance(disk_var, str):
-                fid.create_carray(fid.root, disk_var, atom, (N_samples - 1,))
+                fid.create_carray(fid.root, disk_var, atom, (N_samples,))
             elif isinstance(disk_var, list):
-                fid.create_earray(fid.root, disk_var[0], atom, (N_samples - 1,))
+                fid.create_earray(fid.root, disk_var[0], atom, (N_samples,))
 
     start = 0
     for i,tstop in enumerate(config['tstop']):
@@ -141,9 +141,9 @@ if __name__ == '__main__':
         for gen_id, H in config['inertia'].items():
             pan.alter('Alh', 'm', 2 * H[i], instance=gen_id, annotate=1, invalidate=0)
 
-        data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=2, maxord=2, \
-                        noisefmax=frand/2, noiseinj=2, seed=pan_seeds[i], \
-                        iabstol=1e-6, devvars=1, tmax=0.1, annotate=3, restart=1 if i == 0 else 0)
+        data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=1, \
+                        timepoints=1/frand, forcetps=1, maxiter=65, annotate=3, \
+                        restart=1 if i == 0 else 0)
 
         for mem_var in mem_vars:
             disk_var = mem_vars_map[mem_var]
