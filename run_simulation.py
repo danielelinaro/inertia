@@ -41,12 +41,27 @@ if __name__ == '__main__':
         print('{}: {}: file exists: use -f to overwrite.'.format(progname, output_file))
         sys.exit(2)
 
+    try:
+        integration_mode = config['integration_mode'].lower()
+    except:
+        integration_mode = 'trapezoidal'
+
     random_load_buses = config['random_load_buses']
     N_random_loads = len(random_load_buses)
     N_blocks = len(config['tstop'])
-    with open('/dev/random', 'rb') as fid:
-        rng_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_random_loads + N_blocks)]
+
+    try:
+        rng_seeds = config['seeds']
+    except:
+        with open('/dev/random', 'rb') as fid:
+            rng_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_random_loads + N_blocks)]
+
+    if integration_mode == 'trapezoidal':
+        rng_seeds = rng_seeds[:N_random_loads]
+        pan_seeds = np.nan + np.zeros(N_blocks)
+    else:
         rng_seeds, pan_seeds = rng_seeds[:-N_blocks], rng_seeds[-N_blocks:]
+
     rnd_states = [RandomState(MT19937(SeedSequence(seed))) for seed in rng_seeds]
 
     # OU parameters
@@ -60,6 +75,10 @@ if __name__ == '__main__':
     dt = 1 / frand
     t = dt + np.r_[0 : tstop + dt/2 : dt]
     N_samples = t.size
+
+    if integration_mode not in ('trapezoidal', 'gear'):
+        print('{}: integration_mode must be one of "trapezoidal" or "Gear".')
+        sys.exit(2)
 
     mem_vars_map = config['mem_vars_map']
     mem_vars = list(mem_vars_map.keys())
@@ -98,7 +117,7 @@ if __name__ == '__main__':
         generator_IDs  = tables.StringCol(8, shape=(N_generators,))
         rnd_load_buses = tables.Int64Col(shape=(N_random_loads,))
         rng_seeds      = tables.Int64Col(shape=(N_random_loads,))
-        pan_seeds      = tables.Int64Col(shape=(N_blocks,))
+        pan_seeds      = tables.Float64Col(shape=(N_blocks,)) # these must be floats because they might be NaN's
         inertia        = tables.Float64Col(shape=(N_generators,N_blocks))
         alpha          = tables.Float64Col(shape=(N_random_loads,))
         mu             = tables.Float64Col(shape=(N_random_loads,))
@@ -127,12 +146,21 @@ if __name__ == '__main__':
     tbl.flush()
 
     atom = tables.Float64Atom()
+
+    if integration_mode == 'trapezoidal':
+        array_shape = N_samples,
+    else:
+        array_shape = N_samples - 1,
+
     for disk_var in mem_vars_map.values():
         if disk_var is not None:
             if isinstance(disk_var, str):
-                fid.create_carray(fid.root, disk_var, atom, (N_samples,))
+                fid.create_carray(fid.root, disk_var, atom, array_shape)
             elif isinstance(disk_var, list):
-                fid.create_earray(fid.root, disk_var[0], atom, (N_samples,))
+                fid.create_earray(fid.root, disk_var[0], atom, array_shape)
+
+    if 'save_OU' in config and config['save_OU']:
+        fid.create_array(fid.root, 'OU', np.array(ou), atom=atom)
 
     start = 0
     for i,tstop in enumerate(config['tstop']):
@@ -141,9 +169,24 @@ if __name__ == '__main__':
         for gen_id, H in config['inertia'].items():
             pan.alter('Alh', 'm', 2 * H[i], instance=gen_id, annotate=1, invalidate=0)
 
-        data = pan.tran(tran_name, tstop, mem_vars, nettype=1, method=1, \
-                        timepoints=1/frand, forcetps=1, maxiter=65, annotate=3, \
-                        restart=1 if i == 0 else 0)
+        kwargs = {'nettype': 1, 'annotate': 3, 'restart': 1 if i == 0 else 0}
+
+        if integration_mode == 'trapezoidal':
+            kwargs['method']     = 1
+            kwargs['timepoints'] = 1 / frand
+            kwargs['forcetps']   = 1
+            kwargs['maxiter']    = 65
+        else:
+            kwargs['method']     = 2
+            kwargs['maxord']     = 2
+            kwargs['noisefmax']  = frand / 2
+            kwargs['noiseinj']   = 2
+            kwargs['seed']       = pan_seeds[i]
+            kwargs['iabstol']    = 1e-6
+            kwargs['devvars']    = 1
+            kwargs['tmax']       = 0.1
+
+        data = pan.tran(tran_name, tstop, mem_vars, **kwargs)
 
         for mem_var in mem_vars:
             disk_var = mem_vars_map[mem_var]
