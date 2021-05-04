@@ -144,8 +144,6 @@ Lo9    bus9a  powerload pc=1.767/1.3*(1+COEFF)*(1+LAMBDA) qc=-0.25*(1+LAMBDA) vr
 Pec14   bus8  d8  gnd  q8  gnd  powerec type=0
 ;Pec15   bus11 d11 gnd  q11 gnd  powerec type=0
 
-Coi powercoi gen="G1" gen="G2" gen="G3" gen="G4" type=2
-
 end
 
 ;CntLo cntp gnd vsource vsin=0.02 freq=1/(24*3600/2)
