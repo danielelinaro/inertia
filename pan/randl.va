@@ -29,8 +29,7 @@ analog begin
 	Vq  = Vq * VMAX / Mag;
     end
 
-//    Pwr = transition(v(pwr) * P,0,10m);
-    Pwr = v(pwr) * P;
+    Pwr = transition(v(pwr) * P,0,10m);
 
     i(d) <+ (Vd*Pwr + Vq*Q) / SqrMag;
     i(q) <+ (Vq*Pwr - Vd*Q) / SqrMag;

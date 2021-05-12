@@ -19,6 +19,8 @@ if __name__ == '__main__':
     parser.add_argument('config_file', type=str, action='store', help='PAN netlist')
     parser.add_argument('-o', '--output',  default=None,  type=str, help='output file name')
     parser.add_argument('-f', '--force', action='store_true', help='force overwrite of output file')
+    parser.add_argument('--check-stability', action='store_true',
+                        help='check that the system is stable by running a pole-zero analysis')
     args = parser.parse_args(args=sys.argv[1:])
 
     config_file = args.config_file
@@ -95,12 +97,12 @@ if __name__ == '__main__':
     LAMBDA = config['lambda']
     COEFF = config['coeff']
 
-    pan.alter('Altstop', 'TSTOP',  tstop,  annotate=1)
-    pan.alter('Alfrand', 'FRAND',  frand,  annotate=1)
-    pan.alter('Ald',     'D',      D,      annotate=1)
-    pan.alter('Aldza',   'DZA',    DZA,    annotate=1)
-    pan.alter('Allam',   'LAMBDA', LAMBDA, annotate=1)
-    pan.alter('Alcoeff', 'COEFF',  COEFF,  annotate=1)
+    pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
+    pan.alter('Alfrand', 'FRAND',  frand,  libs, annotate=1)
+    pan.alter('Ald',     'D',      D,      libs, annotate=1)
+    pan.alter('Aldza',   'DZA',    DZA,    libs, annotate=1)
+    pan.alter('Allam',   'LAMBDA', LAMBDA, libs, annotate=1)
+    pan.alter('Alcoeff', 'COEFF',  COEFF,  libs, annotate=1)
 
     ou = [OU(dt, alpha[i], mu[i], c[i], N_samples, rnd_states[i]) for i in range(N_random_loads)]
 
@@ -167,7 +169,7 @@ if __name__ == '__main__':
         tran_name = f'Tr{i+1}'
 
         for gen_id, H in config['inertia'].items():
-            pan.alter('Alh', 'm', 2 * H[i], instance=gen_id, annotate=1, invalidate=0)
+            pan.alter('Alh', 'm', 2 * H[i], libs, instance=gen_id, annotate=1, invalidate=0)
 
         kwargs = {'nettype': 1, 'annotate': 3, 'restart': 1 if i == 0 else 0}
 
@@ -176,6 +178,8 @@ if __name__ == '__main__':
             kwargs['timepoints'] = 1 / frand
             kwargs['forcetps']   = 1
             kwargs['maxiter']    = 65
+            kwargs['saman']      = 'yes'
+            kwargs['sparse']     = 2
         else:
             kwargs['method']     = 2
             kwargs['maxord']     = 2
@@ -186,7 +190,12 @@ if __name__ == '__main__':
             kwargs['devvars']    = 1
             kwargs['tmax']       = 0.1
 
-        data = pan.tran(tran_name, tstop, mem_vars, **kwargs)
+        if args.check_stability:
+            poles = pan.PZ('Pz', mem_vars=['poles'], libs=libs, nettype=1, annotate=0)
+            n_unstable = np.sum(poles.real > 1e-6)
+            print(f'The system has {n_unstable} poles with real part > 1e-6.')
+
+        data = pan.tran(tran_name, tstop, mem_vars, libs, **kwargs)
 
         for mem_var in mem_vars:
             disk_var = mem_vars_map[mem_var]
@@ -196,6 +205,8 @@ if __name__ == '__main__':
                 else:
                     offset = 0.
                 var = get_var(data, mem_vars, mem_var)
+                if i > 0 and integration_mode == 'trapezoidal':
+                    var = var[1:]
                 if isinstance(disk_var, str):
                     stop = start + var.size
                     fid.root[disk_var][start : stop] = var + offset

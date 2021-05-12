@@ -1,12 +1,22 @@
 ground electrical gnd
 
 parameter PRAND=5M
-parameter TSTOP=600
+parameter TSTOP=60
 parameter FRAND=10
-parameter D=0
-parameter DZA=0
+parameter D=2
+parameter DZA=1.0
 parameter LAMBDA=0
 parameter COEFF=0
+parameter H30=250*2
+parameter H31=14.15*2
+parameter H32=16.9*2
+parameter H33=14.3*2
+parameter H34=13*2
+parameter H35=17.4*2
+parameter H36=13.2*2
+parameter H37=12.15*2
+parameter H38=17.25*2
+parameter H39=20*2
 
 options outintnodes=yes ; pivcaching=0
 
@@ -19,9 +29,6 @@ Al_dummy_coeff  alter param="COEFF"  rt=yes
 
 #ifdef PAN
 
-Dc dc nettype=1 print=yes sparse=1
-Pz pz nettype=yes
-
 Rnd control begin
 
     dt = 1/FRAND;
@@ -33,8 +40,11 @@ Rnd control begin
 
 endcontrol
 
-Tr tran stop=TSTOP nettype=1 method=2 maxord=2 iabstol=1u devvars=1 tmax=0.1 \
-        noisefmax=FRAND/2 noiseinj=2 seed=12345 
+Dc dc nettype=1 print=yes sparse=1
+Pz pz nettype=1
+
+Tr1 tran stop=TSTOP/2 nettype=1 restart=1 annotate=3 method=1 timepoints=1/FRAND forcetps=1 maxiter=65 saman=yes sparse=2
+Tr2 tran stop=TSTOP   nettype=1 restart=1 annotate=3 method=1 timepoints=1/FRAND forcetps=1 maxiter=65 saman=yes sparse=2
 
 #endif
 
@@ -60,7 +70,7 @@ Pg30 bus30 avr30 pm30 omega30 powergenerator pg=(1+LAMBDA)*2.5 \
     prating=1.000000e+08 vrating=1.000000e+03 qmax=8.000000e+00 \
     qmin=-5.000000e+00 pmax=9.999900e+01 pmin=0.000000e+00 \ 
     type=4 ra=0 xdp=0.0060 xqp=0.0080 xd=0.0200 xq=0.019 \
-    td0p=7.00 tq0p=0.70 xl=0.0030 h=500 d=D qlimits=no
+    td0p=7.00 tq0p=0.70 xl=0.0030 h=H30 d=D qlimits=no
 
 E31  bus31  avr31 poweravr vrating=1k type=2 vmax=4.38 vmin=0 ka=20 \
                ta=0.02 kf=0.001 tf=1 ke=1 te=1.98 tr=0.001 ae=0.0006 be=0.9
@@ -73,7 +83,7 @@ Pg31 bus31 avr31 pm31 omega31 powergenerator pg=(1+LAMBDA)*5.729300e+00 \
     prating=1.000000e+08 vrating=1.000000e+03 qmax=8.000000e+00 \
     qmin=-5.000000e+00 pmax=9.999900e+01 pmin=0.000000e+00 \
     type=4 ra=0 xdp=0.0697 xqp=0.1700 xd=0.2950 xq=0.282 \
-    td0p=6.56 tq0p=1.50 xl=0.0350 h=30.3 d=D slack=yes qlimits=no
+    td0p=6.56 tq0p=1.50 xl=0.0350 h=H31 d=D slack=yes qlimits=no
 
 E32  bus32  avr32 poweravr vrating=1k type=2 vmax=4.38 vmin=0 ka=20 \
                ta=0.02 kf=0.001 tf=1 ke=1 te=1.98 tr=0.001 ae=0.0006 be=0.9
@@ -86,19 +96,19 @@ Pg32 bus32 avr32 pm32 omega32 powergenerator pg=(1+LAMBDA)*6.500000e+00 \
     prating=1.000000e+08 vrating=1.000000e+03 qmax=8.000000e+00 \
     qmin=-5.000000e+00 pmax=9.999900e+01 pmin=0.000000e+00 \
     type=4 ra=0 xdp=0.0531 xqp=0.0876 xd=0.2495 xq=0.237 \
-    td0p=5.70 tq0p=1.50 xl=0.0304 h=35.8 d=D qlimits=no
+    td0p=5.70 tq0p=1.50 xl=0.0304 h=H32 d=D qlimits=no
 
 Pg33 bus33 powergenerator pg=(1+LAMBDA)*6.320000e+00 vg=9.972000e-01 \
     prating=1.000000e+08 vrating=1.000000e+03 qmax=8.000000e+00 \
     qmin=-5.000000e+00 pmax=9.999900e+01 pmin=0.000000e+00 \
     type=4 ra=0 xdp=0.0436 xqp=0.1660 xd=0.2620 xq=0.258 \
-    td0p=5.69 tq0p=1.50 xl=0.0295 h=28.6 d=D qlimits=no
+    td0p=5.69 tq0p=1.50 xl=0.0295 h=H33 d=D qlimits=no
 
 Pg34 bus34 powergenerator pg=(1+LAMBDA)*5.080000e+00 vg=1.012300e+00 \
     prating=1.000000e+08 vrating=1.000000e+03 qmax=4.000000e+00 \
     qmin=-3.000000e+00 pmax=9.999900e+01 pmin=0.000000e+00 \
     type=4 ra=0 xdp=0.1320 xqp=0.1660 xd=0.6700 xq=0.620 \
-    td0p=5.40 tq0p=0.44 xl=0.0540 h=26.0 d=D qlimits=no
+    td0p=5.40 tq0p=0.44 xl=0.0540 h=H34 d=D qlimits=no
 
 E35  bus35  avr35 poweravr vrating=1k type=2 vmax=4.38 vmin=0 ka=20 \
 	       ta=0.02 kf=0.001 tf=1 ke=1 te=1.98 tr=0.001 ae=0.0006 be=0.9
@@ -110,19 +120,19 @@ Pg35 bus35 avr35 pm35 omega35 powergenerator pg=(1+LAMBDA)*6.500000e+00 \
     vg=1.049300e+00 prating=1.000000e+08 vrating=1.000000e+03 \
     qmax=8.000000e+00 qmin=-5.000000e+00 pmax=9.999900e+01 pmin=0.000000e+00 \
     type=4 ra=0 xdp=0.0500 xqp=0.0814 xd=0.2540 xq=0.241 \
-    td0p=7.30 tq0p=0.40 xl=0.0224 h=34.8 d=D qlimits=no
+    td0p=7.30 tq0p=0.40 xl=0.0224 h=H35 d=D qlimits=no
 
 Pg36 bus36 powergenerator pg=(1+LAMBDA)*5.600000e+00 vg=1.063500e+00 \
     prating=1.000000e+08 vrating=1.000000e+03 qmax=8.000000e+00 \
     qmin=-5.000000e+00 pmax=9.999900e+01 pmin=0.000000e+00 \
     type=4 ra=0 xdp=0.0490 xqp=0.1860 xd=0.2950 xq=0.292 \
-    td0p=5.66 tq0p=1.50 xl=0.0322 h=26.4 d=D qlimits=no
+    td0p=5.66 tq0p=1.50 xl=0.0322 h=H36 d=D qlimits=no
 
 Pg37 bus37 powergenerator pg=(1+LAMBDA)*5.400000e+00 vg=1.027800e+00 \
     prating=1.000000e+08 vrating=1.000000e+03 qmax=8.000000e+00 \
     qmin=-5.000000e+00 pmax=9.999900e+01 pmin=0.000000e+00 \
     type=4 ra=0 xdp=0.0570 xqp=0.0911 xd=0.2900 xq=0.280 \
-    td0p=6.70 tq0p=0.41 xl=0.0280 h=24.3 d=D
+    td0p=6.70 tq0p=0.41 xl=0.0280 h=H37 d=D
 
 E38  bus38  avr38 poweravr vrating=1k type=2 vmax=4.38 vmin=0 ka=20 \
 	       ta=0.02 kf=0.001 tf=1 ke=1 te=1.98 tr=0.001 ae=0.0006 be=0.9
@@ -134,41 +144,19 @@ Pg38 bus38 avr38 pm38 omega38 powergenerator pg=(1+LAMBDA)*8.300000e+00 \
     vg=1.026500e+00 prating=1.000000e+08 vrating=1.000000e+03 \
     qmax=8.000000e+00 qmin=-5.000000e+00 pmax=9.999900e+01 pmin=0.000000e+00 \
     type=4 ra=0 xdp=0.0570 xqp=0.0587 xd=0.2106 xq=0.205 \
-    td0p=4.79 tq0p=1.69 xl=0.0298 h=34.5 d=D
+    td0p=4.79 tq0p=1.69 xl=0.0298 h=H38 d=D
 
 E39  bus39  avr39 poweravr vrating=1k type=2 vmax=4.38 vmin=0 ka=20 \
                ta=0.02 kf=0.001 tf=1 ke=1 te=1.98 tr=0.001 ae=0.0006 be=0.9
 
-parameter MEX=3.4216*100
-parameter MHP=9.2897*100
-parameter MIP=1.55589*1000
-parameter MLP=8.58670*1000
-parameter KHP=7.277
-parameter KIP=13.168
-parameter KLP=19.618
-parameter KEX=1.064
-parameter DHP=1.0/10
-parameter DIP=1.0/10
-parameter DLP=1.0/10
-parameter DEX=1.0/10
-parameter D12=0.0
-parameter D23=0.0
-parameter D34=0.0
-parameter D45=0.0
-
 T39   tg39  omega39 powertg type=1 omegaref=1 r=0.02 pmax=12 pmin=0 ts=0.1 \
                             tc=0.45 t3=0 t4=12 t5=50 gen="Pg39"  dza=DZA
 
-Sh39  tg39  pm39  omega39  x39  y39  powershaft \
-	    mex=MEX mhp=MHP mip=MIP mlp=MLP khp=KHP kip=KIP klp=KLP kex=KEX \
-	    dip=DIP dlp=DLP dhp=DHP d12=D12 d23=D23 d34=D34 d45=D45 dex=DEX \
-	    gen="Pg39"
-
-Pg39 bus39 avr39 pm39 omega39 x39 y39 powergenerator pg=(1+LAMBDA)*1.005729e+01 vg=1.030000e+00 \
+Pg39 bus39 avr39 tg39 omega39 x39 y39 powergenerator pg=(1+LAMBDA)*1.005729e+01 vg=1.030000e+00 \
     prating=1.000000e+08 vrating=1.000000e+03 qmax=1.500000e+01 \
     qmin=-1.000000e+01 pmax=9.999900e+01 pmin=0.000000e+00 \
     type=4 ra=0 xdp=0.0310 xqp=0.0080 \
-    xd=0.0100 xq=0.069 td0p=10.2 tq0p=0.00 xl=0.0125 h=42.0 d=D qlimits=no
+    xd=0.0100 xq=0.069 td0p=10.2 tq0p=0.00 xl=0.0125 h=H39 d=D qlimits=no
 
 ; +-------------+
 ; | Power loads |
@@ -308,11 +296,11 @@ Pec11 bus26 d26 gnd q26 gnd powerec type=0
 end
 
 Rnd8 d8 q8 rand8  RAND_L P=PRAND VRATING=1k VMAX=1.2*1k VMIN=0.8*1k
-Wav8 rand8 gnd port noisesamples="noise_samples_bus_8"
+Wav8 rand8 gnd vsource wave="noise_samples_bus_8"
 Rnd21 d21 q21 rand21  RAND_L P=PRAND VRATING=1k VMAX=1.2*1k VMIN=0.8*1k
-Wav21 rand21 gnd port noisesamples="noise_samples_bus_21"
+Wav21 rand21 gnd vsource wave="noise_samples_bus_21"
 Rnd26 d26 q26 rand26  RAND_L P=PRAND VRATING=1k VMAX=1.2*1k VMIN=0.8*1k
-Wav26 rand26 gnd port noisesamples="noise_samples_bus_26"
+Wav26 rand26 gnd vsource wave="noise_samples_bus_26"
 
 model RAND_L nport veriloga="randl.va" verilogaprotected=1
 
