@@ -5,7 +5,7 @@ import tables
 import numpy as np
 
 
-__all__ = ['load_one_block', 'load_data_areas', 'load_data_generators', 'load_data_slide', 'predict', 'slide_window']
+__all__ = ['read_inertia_values', 'load_one_block', 'load_data_areas', 'load_data_generators', 'load_data_slide', 'predict', 'slide_window']
 
 default_H = {
     'IEEE14': {
@@ -22,6 +22,29 @@ default_H = {
         4: 6.175
     }
 }
+
+
+def read_inertia_values(filename, generators_areas_map = None, generators_Pnom = None, area_inertia = 'energy'):
+    fid = tables.open_file(filename, 'r')
+    pars = fid.root.parameters.read()
+    fid.close()
+    generator_IDs = [gen_ID.decode('utf-8') for gen_ID in pars['generator_IDs'][0]]
+    generator_inertias = pars['inertia'][0]
+    if generators_areas_map is not None:
+        N_areas = len(generators_areas_map)
+        area_inertias = np.zeros(N_areas)
+        for i,area_generators in enumerate(generators_areas_map):
+            num, den = 0, 0
+            for gen_ID in area_generators:
+                idx = generator_IDs.index(gen_ID)
+                num += generator_inertias[idx] * generators_Pnom[gen_ID]
+                den += generators_Pnom[gen_ID]
+                if area_inertia.lower() == 'energy':
+                    area_inertias[i] = num * 1e-9         # [GW s]
+                elif area_inertia.lower() == 'coi':
+                    area_inertias[i] = num / den * 1e-9   # [s]
+        return generator_IDs, generator_inertias, area_inertias
+    return generator_IDs, generator_inertias
 
 
 def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, dtype = np.float32):

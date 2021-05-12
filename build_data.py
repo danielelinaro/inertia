@@ -274,7 +274,7 @@ if __name__ == '__main__':
                 exec(f'noise_samples_bus_{bus}[1,:] = OU(dt, alpha[k], mu[k], c[k], N_samples, state)')
 
             # run a transient analysis
-            data = pan.tran('Tr', tstop, mem_vars, nettype=1, method=1,
+            data = pan.tran('Tr', tstop, mem_vars, libs, nettype=1, method=1,
                             timepoints=1/frand, forcetps=1, maxiter=65)
 
             # save the results to file

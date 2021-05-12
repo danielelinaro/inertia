@@ -26,14 +26,14 @@
     "coeff": 0.0,
     "tstop": [1800, 3600],
     "mem_vars_map" : {
-	"time:noise": "time",
-	"omegael03:noise": "omegael_bus3",
-	"omegael14:noise": "omegael_bus14",
-	"omegael17:noise": "omegael_bus17",
-	"omegael39:noise": "omegael_bus39",
-	"pe3:noise": "Pe_bus3",
-	"pe14:noise": "Pe_bus14",
-	"pe17:noise": "Pe_bus17",
-	"pe39:noise": "Pe_bus39"
+	"time": "time",
+	"omegael03": "omegael_bus3",
+	"omegael14": "omegael_bus14",
+	"omegael17": "omegael_bus17",
+	"omegael39": "omegael_bus39",
+	"pe3": "Pe_bus3",
+	"pe14": "Pe_bus14",
+	"pe17": "Pe_bus17",
+	"pe39": "Pe_bus39"
     }
 }
