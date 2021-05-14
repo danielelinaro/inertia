@@ -132,7 +132,7 @@ if __name__ == '__main__':
     N_random_loads = len(random_load_buses)
 
     # seeds for the random number generators
-    with open('/dev/random', 'rb') as fid:
+    with open('/dev/urandom', 'rb') as fid:
         hw_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_random_loads)]
     random_states = [RandomState(MT19937(SeedSequence(seed))) for seed in hw_seeds]
     seeds = [rs.randint(low=0, high=1000000, size=(N_inertia, N_trials)) for rs in random_states]
@@ -175,12 +175,12 @@ if __name__ == '__main__':
     # load scaling coefficient
     COEFF = config['coeff']
     
-    pan.alter('Altstop', 'TSTOP',  tstop,  annotate=1)
-    pan.alter('Alfrand', 'FRAND',  frand,  annotate=1)
-    pan.alter('Ald',     'D',      D,      annotate=1)
-    pan.alter('Aldza',   'DZA',    DZA,    annotate=1)
-    pan.alter('Allam',   'LAMBDA', LAMBDA, annotate=1)
-    pan.alter('Alcoeff', 'COEFF',  COEFF,  annotate=1)
+    pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
+    pan.alter('Alfrand', 'FRAND',  frand,  libs, annotate=1)
+    pan.alter('Ald',     'D',      D,      libs, annotate=1)
+    pan.alter('Aldza',   'DZA',    DZA,    libs, annotate=1)
+    pan.alter('Allam',   'LAMBDA', LAMBDA, libs, annotate=1)
+    pan.alter('Alcoeff', 'COEFF',  COEFF,  libs, annotate=1)
 
     mem_vars_map = config['mem_vars']
     mem_vars = list(mem_vars_map.keys())
@@ -226,12 +226,17 @@ if __name__ == '__main__':
 
         out_file = ''
         for gen_id in generator_IDs:
-            pan.alter('Al', 'm', 2 * inertia_values[gen_id][i], instance=gen_id, invalidate='false')
+            pan.alter('Al', 'm', 2 * inertia_values[gen_id][i], libs, instance=gen_id, invalidate='false')
             out_file += f'_{inertia_values[gen_id][i]:.3f}'
         out_file = '{}/inertia{}{}.h5'.format(output_dir, out_file, suffix)
 
         if os.path.isfile(out_file):
             continue
+
+        # run a poles/zeros analysis to save data about the stability of the system
+        poles = pan.PZ('Pz', mem_vars=['poles'], libs=libs, nettype=1, annotate=0)
+        # sort the poles in descending order and convert them to Hz
+        poles = poles[:, [i for i in np.argsort(poles.real)[0][::-1]]] / (2 * np.pi)
 
         ### first of all, write to file all the data and parameters that we already have
         fid = tables.open_file(out_file, 'w', filters=compression_filter)
@@ -255,6 +260,8 @@ if __name__ == '__main__':
         params.append()
         tbl.flush()
 
+        fid.create_array(fid.root, 'poles', poles)
+
         for bus in random_load_buses:
             fid.create_earray(fid.root, f'noise_bus_{bus}', atom, (0, N_samples))
         for disk_var in mem_vars_map.values():
@@ -274,8 +281,9 @@ if __name__ == '__main__':
                 exec(f'noise_samples_bus_{bus}[1,:] = OU(dt, alpha[k], mu[k], c[k], N_samples, state)')
 
             # run a transient analysis
-            data = pan.tran('Tr', tstop, mem_vars, libs, nettype=1, method=1,
-                            timepoints=1/frand, forcetps=1, maxiter=65)
+            data = pan.tran('Tr', tstop, mem_vars, libs, nettype=1,
+                            method=1, timepoints=1/frand, forcetps=1,
+                            maxiter=65, saman=1, sparse=2)
 
             # save the results to file
             get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]

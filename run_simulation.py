@@ -39,7 +39,13 @@ if __name__ == '__main__':
     else:
         output_file = args.output
 
-    if os.path.isfile(output_file) and not args.force:
+    try:
+        # we check whether the file exists in this way because if it doesn't
+        # pan crashes due to errno being somehow set to 2 ("No such file or directory"
+        # error).
+        import pathlib
+        pathlib.Path(output_file).touch(mode=0o644, exist_ok=args.force)
+    except:
         print('{}: {}: file exists: use -f to overwrite.'.format(progname, output_file))
         sys.exit(2)
 
@@ -48,6 +54,10 @@ if __name__ == '__main__':
     except:
         integration_mode = 'trapezoidal'
 
+    if integration_mode not in ('trapezoidal', 'gear'):
+        print('{}: integration_mode must be one of "trapezoidal" or "Gear".')
+        sys.exit(2)
+
     random_load_buses = config['random_load_buses']
     N_random_loads = len(random_load_buses)
     N_blocks = len(config['tstop'])
@@ -55,7 +65,7 @@ if __name__ == '__main__':
     try:
         rng_seeds = config['seeds']
     except:
-        with open('/dev/random', 'rb') as fid:
+        with open('/dev/urandom', 'rb') as fid:
             rng_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_random_loads + N_blocks)]
 
     if integration_mode == 'trapezoidal':
@@ -77,10 +87,6 @@ if __name__ == '__main__':
     dt = 1 / frand
     t = dt + np.r_[0 : tstop + dt/2 : dt]
     N_samples = t.size
-
-    if integration_mode not in ('trapezoidal', 'gear'):
-        print('{}: integration_mode must be one of "trapezoidal" or "Gear".')
-        sys.exit(2)
 
     mem_vars_map = config['mem_vars_map']
     mem_vars = list(mem_vars_map.keys())
@@ -165,7 +171,7 @@ if __name__ == '__main__':
         fid.create_array(fid.root, 'OU', np.array(ou), atom=atom)
 
     start = 0
-    for i,tstop in enumerate(config['tstop']):
+    for i, tstop in enumerate(config['tstop']):
         tran_name = f'Tr{i+1}'
 
         for gen_id, H in config['inertia'].items():
@@ -195,7 +201,12 @@ if __name__ == '__main__':
             n_unstable = np.sum(poles.real > 1e-6)
             print(f'The system has {n_unstable} poles with real part > 1e-6.')
 
-        data = pan.tran(tran_name, tstop, mem_vars, libs, **kwargs)
+        try:
+            data = pan.tran(tran_name, tstop, mem_vars, libs, **kwargs)
+        except:
+            fid.close()
+            os.remove(output_file)
+            sys.exit(-1)
 
         for mem_var in mem_vars:
             disk_var = mem_vars_map[mem_var]
