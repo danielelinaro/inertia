@@ -197,7 +197,10 @@ if __name__ == '__main__':
             kwargs['tmax']       = 0.1
 
         if args.check_stability:
-            poles = pan.PZ('Pz', mem_vars=['poles'], libs=libs, nettype=1, annotate=0)
+            poles = pan.PZ('Pz', mem_vars=['poles'], libs=libs, nettype=1, annotate=0)[0]
+            # sort the poles in descending order and convert them to Hz
+            poles = poles[np.argsort(poles.real)[::-1]] / (2 * np.pi)
+            #fid.create_array(fid.root, 'poles', poles)
             n_unstable = np.sum(poles.real > 1e-6)
             print(f'The system has {n_unstable} poles with real part > 1e-6.')
 
