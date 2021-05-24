@@ -35,9 +35,13 @@
 	"omegael14": "omegael_bus14",
 	"omegael17": "omegael_bus17",
 	"omegael39": "omegael_bus39",
-	"pe3": "Pe_bus3",
+	"pe3":  "Pe_bus3",
 	"pe14": "Pe_bus14",
 	"pe17": "Pe_bus17",
-	"pe39": "Pe_bus39"
+	"pe39": "Pe_bus39",
+	"qe3":  "Qe_bus3",
+	"qe14": "Qe_bus14",
+	"qe17": "Qe_bus17",
+	"qe39": "Qe_bus39"
     }
 }

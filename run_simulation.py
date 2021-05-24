@@ -34,8 +34,22 @@ if __name__ == '__main__':
         print('{}: {}: no such file.'.format(progname, pan_file))
         sys.exit(1)
 
+    generator_IDs = list(config['inertia'].keys())
+    N_generators = len(generator_IDs)
+    N_inertia_values = max(map(len, config['inertia'].values()))
+    inertia_values = []
+    for gen_id in generator_IDs:
+        if len(config['inertia'][gen_id]) == 1:
+            inertia_values.append([config['inertia'][gen_id][0] for _ in range(N_inertia_values)])
+        elif len(config['inertia'][gen_id]) == N_inertia_values:
+            inertia_values.append(config['inertia'][gen_id])
+        else:
+            raise Exception(f'Wrong number of inertia values for generator {gen_id}')
+    inertia_values = np.array(inertia_values)
+
     if args.output is None:
-        output_file = os.path.splitext(os.path.basename(pan_file))[0] + '.h5'
+        output_file = os.path.splitext(os.path.basename(pan_file))[0] + '_' + \
+            '_'.join(['-'.join(map(lambda h: f'{h:.3f}', np.unique(H))) for H in inertia_values]) + '.h5'
     else:
         output_file = args.output
 
@@ -117,10 +131,6 @@ if __name__ == '__main__':
 
     get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]
 
-    generator_IDs = list(config['inertia'].keys())
-    N_generators = len(generator_IDs)
-    inertia_values = np.array([config['inertia'][gen_id] for gen_id in generator_IDs])
-
     class Parameters (BaseParameters):
         generator_IDs  = tables.StringCol(8, shape=(N_generators,))
         rnd_load_buses = tables.Int64Col(shape=(N_random_loads,))
@@ -174,8 +184,8 @@ if __name__ == '__main__':
     for i, tstop in enumerate(config['tstop']):
         tran_name = f'Tr{i+1}'
 
-        for gen_id, H in config['inertia'].items():
-            pan.alter('Alh', 'm', 2 * H[i], libs, instance=gen_id, annotate=1, invalidate=0)
+        for j, gen_id in enumerate(generator_IDs):
+            pan.alter('Alh', 'm', 2 * inertia_values[j,i], libs, instance=gen_id, annotate=1, invalidate=0)
 
         kwargs = {'nettype': 1, 'annotate': 3, 'restart': 1 if i == 0 else 0}
 
