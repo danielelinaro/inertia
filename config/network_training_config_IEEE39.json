@@ -9,9 +9,10 @@
     },
     "area_inertia": "energy",
     "data_dirs": ["data/IEEE39/var_H_area_{}/IEEE39_D=2_DZA=60.0"],
-    "var_names": ["omegael_bus3", "Pe_bus3", "omegael_bus14", "Pe_bus14", "omegael_bus17", "Pe_bus17"],
+    "var_names": ["Pe_bus3", "Vd_bus3", "Vq_bus3", "Pe_bus14", "Vd_bus14", "Vq_bus14", "Pe_bus17", "Vd_bus17", "Vq_bus17"],
     "max_block_size": 500,
     "normalization": "training_set",
+    "comet_experiment_tags": ["H_G1_500", "stoch_load_bus_3"],
     "model_arch": {
 	"N_dims": 1,
 	"N_units": {
@@ -55,7 +56,7 @@
 	"names": ["early_stopping"],
 	"early_stopping": {
 	    "monitor": "val_loss",
-	    "patience": 500,
+	    "patience": 200,
 	    "mode": "min"
 	},
 	"reduce_on_plateau": {

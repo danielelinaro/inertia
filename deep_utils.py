@@ -47,7 +47,7 @@ def read_inertia_values(filename, generators_areas_map = None, generators_Pnom =
     return generator_IDs, generator_inertias
 
 
-def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, dtype = np.float32):
+def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, dtype = np.float32, add_omega_ref = True):
     """
     This function loads a single data file containing the results of the simulations for one value of inertia
     """
@@ -56,7 +56,18 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, d
     fid = tables.open_file(filename, 'r')
     # do not convert time to dtype here because that gives problems when computing n_samples below
     time = fid.root.time.read()
-    X = [fid.root[var_name].read(stop=np.min([fid.root[var_name].shape[0], max_num_rows])) for var_name in var_names]
+    if len(fid.root[var_names[0]].shape) > 1:
+        X = [fid.root[var_name].read(stop=np.min([fid.root[var_name].shape[0], max_num_rows])) for var_name in var_names]
+    else:
+        X = [fid.root[var_name].read() for var_name in var_names]
+    if 'omega_ref' in fid.root and add_omega_ref:
+        if len(fid.root[var_names[0]].shape) > 1:
+            omega_ref = fid.root.omega_ref.read(stop=np.min([fid.root.omega_ref.shape[0], max_num_rows])) - 1
+        else:
+            omega_ref = fid.root.omega_ref.read() - 1
+        for i,var_name in enumerate(var_names):
+            if var_name != 'omega_ref' and 'omega' in var_name:
+                X[i] += omega_ref
     pars = fid.root.parameters.read()
     inertia = pars['inertia'][0]
     generator_IDs = [gen_ID.decode('utf-8') for gen_ID in pars['generator_IDs'][0]]
@@ -74,7 +85,7 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, d
 
 
 def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_inertia,
-                    max_block_size = np.inf, dtype = np.float32, use_tf = True):
+                    max_block_size = np.inf, dtype = np.float32, use_tf = True, add_omega_ref = True):
     # Note: dtype should be a NumPy type, even if use_tf = True
     X = {}
     Y = {}
@@ -85,7 +96,7 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
     n_areas = len(generators_areas_map)
     for key in data_files:
         for data_file in data_files[key]:
-            time, x, h, generator_IDs = load_one_block(data_file, var_names, 60, max_block_size, dtype)
+            time, x, h, generator_IDs = load_one_block(data_file, var_names, 60, max_block_size, dtype, add_omega_ref)
             y = np.zeros(n_areas, dtype=dtype)
             for i,area_generators in enumerate(generators_areas_map):
                 num = 0
@@ -173,7 +184,7 @@ def slide_window(X, window_size, overlap=None, window_step=None, N_windows=-1):
             break
     return Y, idx
 
-def load_data_slide(data_files, var_names, data_mean = None, data_std = None, window_dur = 60, window_step = 10, ttran = 0, normalize_sliding=False, verbose=False):
+def load_data_slide(data_files, var_names, data_mean = None, data_std = None, window_dur = 60, window_step = 10, ttran = 0, normalize_sliding=False, add_omega_ref=True, verbose=False):
     fids = [tables.open_file(data_file, 'r') for data_file in data_files]
     n_files = len(data_files)
     params = fids[0].root.parameters.read()
@@ -187,7 +198,15 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
     time = np.concatenate(time)
     idx = time > ttran
     N_samples = time.size
-    data = {var_name: np.concatenate([fid.root[var_name] for fid in fids]) for var_name in var_names}
+    data = {var_name: np.concatenate([fid.root[var_name].read() for fid in fids]) for var_name in var_names}
+    if add_omega_ref:
+        try:
+            omega_ref = np.concatenate([fid.root.omega_ref.read() for fid in fids]) - 1
+            for var_name in var_names:
+                if var_name != 'omega_ref' and 'omega' in var_name:
+                    data[var_name] += omega_ref
+        except:
+            pass
     if not normalize_sliding:
         if data_mean is None:
             data_mean = {var_name: np.mean(data[var_name][idx]) for var_name in var_names}

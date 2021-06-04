@@ -300,7 +300,7 @@ if __name__ == '__main__':
         sys.exit(1)
     config = json.load(open(config_file, 'r'))
 
-    with open('/dev/random', 'rb') as fid:
+    with open('/dev/urandom', 'rb') as fid:
         seed = int.from_bytes(fid.read(4), 'little')
     tf.random.set_seed(seed)
     print_msg('Seed: {}'.format(seed))
@@ -473,6 +473,11 @@ if __name__ == '__main__':
         else:
             experiment.add_tag(config['model_arch']['preproc_activation'] + '_' + \
                                config['model_arch']['activation_loc'])
+        try:
+            for tag in config['comet_experiment_tags']:
+                experiment.add_tag(tag)
+        except:
+            pass
 
     ### train the network
     history = train_model(model, x, y,

@@ -1,22 +1,22 @@
 {
     "pan_file": "pan/ieee39.pan",
     "inertia": {
-	"Pg30": [250],
-	"Pg31": [10, 21],
-	"Pg32": [14, 23],
-	"Pg33": [14.3],
-	"Pg34": [13],
-	"Pg35": [17.4],
-	"Pg36": [13.2],
-	"Pg37": [12.15],
-	"Pg38": [17.25],
-	"Pg39": [18, 25]
+	"Pg30": [500],
+	"Pg31": [34],
+	"Pg32": [40],
+	"Pg33": [28.6],
+	"Pg34": [26],
+	"Pg35": [34.8],
+	"Pg36": [26.4],
+	"Pg37": [24.3],
+	"Pg38": [34.5],
+	"Pg39": [46]
     },
-    "random_load_buses": [8, 21, 26],
+    "random_load_buses": [3],
     "OU": {
-	"alpha": [0.5, 0.5, 0.5],
-	"mu": [0.0, 0.0, 0.0],
-	"c": [0.5, 0.5, 0.5]
+	"alpha": [0.5],
+	"mu": [0.0],
+	"c": [0.5]
     },
     "damping": 2,
     "DZA": 60.0,
@@ -24,7 +24,7 @@
     "frequency": 60.0,
     "lambda": 0.0,
     "coeff": 0.0,
-    "tstop": [1800, 3600],
+    "tstop": [3600],
     "mem_vars_map" : {
 	"time": "time",
 	"omegael03": "omegael_bus3",
@@ -38,6 +38,15 @@
 	"qe3": "Qe_bus3",
 	"qe14": "Qe_bus14",
 	"qe17": "Qe_bus17",
-	"qe39": "Qe_bus39"
+	"qe39": "Qe_bus39",
+        "bus3:d": "Vd_bus3",
+        "bus3:q": "Vq_bus3",
+        "bus14:d": "Vd_bus14",
+        "bus14:q": "Vq_bus14",
+        "bus17:d": "Vd_bus17",
+        "bus17:q": "Vq_bus17",
+        "bus39:d": "Vd_bus39",
+        "bus39:q": "Vq_bus39",
+        "omega30": "omega_ref"
     }
 }
