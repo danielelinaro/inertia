@@ -291,6 +291,7 @@ if __name__ == '__main__':
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='configuration file')
     parser.add_argument('-o', '--output-dir',  default='experiments',  type=str, help='output directory')
+    parser.add_argument('--max-cores',  default=None,  type=int, help='maximum number of cores to be used by Keras)')
     parser.add_argument('--no-comet', action='store_true', help='do not use CometML to log the experiment')
     args = parser.parse_args(args=sys.argv[1:])
 
@@ -304,6 +305,17 @@ if __name__ == '__main__':
         seed = int.from_bytes(fid.read(4), 'little')
     tf.random.set_seed(seed)
     print_msg('Seed: {}'.format(seed))
+
+    if args.max_cores is not None:
+        config['max_cores'] = args.max_cores
+    if 'max_cores' in config and config['max_cores'] is not None:
+        max_cores = config['max_cores']
+        if max_cores > 0:
+            tf.config.threading.set_inter_op_parallelism_threads(max_cores)
+            tf.config.threading.set_intra_op_parallelism_threads(max_cores)
+            print_msg(f'Maximum number of cores set to {max_cores}.')
+        else:
+            print_warning('Maximum number of cores must be positive.')
 
     log_to_comet = not args.no_comet
     
