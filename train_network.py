@@ -49,20 +49,24 @@ def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation
             raise Exception(f'Must specify activation function location')
         elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
-    for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
+    base_name = input_layer.name
+    for n,(N_conv,N_pooling,sz) in enumerate(zip(N_units['conv'], N_units['pooling'], kernel_size)):
+        conv_lyr_name = base_name + f'_conv{n+1}'
+        activ_lyr_name = base_name + f'_relu{n+1}'
+        pool_lyr_name = base_name + f'_pool{n+1}'
         try:
-            L = layers.Conv1D(N_conv, sz, activation=None)(L)
+            L = layers.Conv1D(N_conv, sz, activation=None, name=conv_lyr_name)(L)
         except:
-            L = layers.Conv1D(N_conv, sz, activation=None)(input_layer)
+            L = layers.Conv1D(N_conv, sz, activation=None, name=conv_lyr_name)(input_layer)
         if activation_fun is not None:
             if activation_loc == 'after_conv':
-                L = layers.ReLU()(L)
-                L = layers.MaxPooling1D(N_pooling)(L)
+                L = layers.ReLU(name=activ_lyr_name)(L)
+                L = layers.MaxPooling1D(N_pooling,  name=pool_lyr_name)(L)
             else:
-                L = layers.MaxPooling1D(N_pooling)(L)
-                L = layers.ReLU()(L)
+                L = layers.MaxPooling1D(N_pooling, name=pool_lyr_name)(L)
+                L = layers.ReLU(name=activ_lyr_name)(L)
         else:
-            L = layers.MaxPooling1D(N_pooling)(L)
+            L = layers.MaxPooling1D(N_pooling, name=pool_lyr_name)(L)
     return L
 
 
@@ -74,20 +78,24 @@ def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, activation
             raise Exception(f'Must specify activation function location')
         elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
-    for N_conv,N_pooling,sz in zip(N_units['conv'], N_units['pooling'], kernel_size):
+    base_name = input_layer.name
+    for n,(N_conv,N_pooling,sz) in enumerate(zip(N_units['conv'], N_units['pooling'], kernel_size)):
+        conv_lyr_name = base_name + f'_conv{n+1}'
+        activ_lyr_name = base_name + f'_relu{n+1}'
+        pool_lyr_name = base_name + f'_pool{n+1}'
         try:
-            L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(L)
+            L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None, name=conv_lyr_name)(L)
         except:
-            L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None)(input_layer)
+            L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None, name=conv_lyr_name)(input_layer)
         if activation_fun is not None:
             if activation_loc == 'after_conv':
-                L = layers.ReLU()(L)
-                L = layers.MaxPooling2D([N_pooling, 1])(L)
+                L = layers.ReLU(name=activ_lyr_name)(L)
+                L = layers.MaxPooling2D([N_pooling, 1], name=pool_lyr_name)(L)
             else:
-                L = layers.MaxPooling2D([N_pooling, 1])(L)
-                L = layers.ReLU()(L)
+                L = layers.MaxPooling2D([N_pooling, 1], name=pool_lyr_name)(L)
+                L = layers.ReLU(name=activ_lyr_name)(L)
         else:
-            L = layers.MaxPooling2D([N_pooling, 1])(L)
+            L = layers.MaxPooling2D([N_pooling, 1], name=pool_lyr_name)(L)
     return L
 
 
@@ -200,12 +208,12 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, \
 
     if isinstance(L, list):
         L = layers.concatenate(L)
-    L = layers.Flatten()(L)
-    for n in N_units['dense']:
-        L = layers.Dense(n, activation='relu')(L)
+    L = layers.Flatten(name='flatten')(L)
+    for i,n in enumerate(N_units['dense']):
+        L = layers.Dense(n, activation='relu', name=f'fc{i+1}')(L)
     if model_arch['dropout_coeff'] > 0:
-        L = layers.Dropout(model_arch['dropout_coeff'])(L)
-    output = layers.Dense(y['training'].shape[1])(L)
+        L = layers.Dropout(model_arch['dropout_coeff'], name='dropout')(L)
+    output = layers.Dense(y['training'].shape[1], name='predictions')(L)
 
     model = keras.Model(inputs=inputs, outputs=output)
 
