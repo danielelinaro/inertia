@@ -5,6 +5,7 @@ parameter TSTOP=60
 parameter FRAND=10
 parameter D=2
 parameter DZA=1.0
+parameter DZA_WIDE=1.0
 parameter LAMBDA=0
 parameter COEFF=0
 parameter H30=500
@@ -29,14 +30,12 @@ Al_dummy_coeff  alter param="COEFF"  rt=yes
 
 #ifdef PAN
 
-Rnd control begin
+Ctrl control begin
 
     dt = 1/FRAND;
     T  = [dt:dt:TSTOP+dt];
 
-    noise_samples_bus_8  = [ T, randn( length(T) ) ];
-    noise_samples_bus_21 = [ T, randn( length(T) ) ];
-    noise_samples_bus_26 = [ T, randn( length(T) ) ];
+    noise_samples_bus_3  = [ T, randn( length(T) ) ];
 
 endcontrol
 
@@ -63,7 +62,7 @@ E30  bus30  avr30 poweravr vrating=1k type=2 vmax=4.38 vmin=0 ka=20 \
 	       ta=0.02 kf=0.001 tf=1 ke=1 te=1.98 tr=0.001 ae=0.0006 be=0.9
 
 T30   pm30  omega30 powertg type=1 omegaref=1 r=0.02 pmax=10 pmin=0 ts=0.1 \
-                            tc=0.45 t3=0 t4=12 t5=50 gen="Pg30" dza=DZA
+                            tc=0.45 t3=0 t4=12 t5=50 gen="Pg30" dza=DZA_WIDE
 
 Pg30 bus30 avr30 pm30 omega30 powergenerator pg=(1+LAMBDA)*2.5 \
     vg=1.047500e+00 \
@@ -76,7 +75,7 @@ E31  bus31  avr31 poweravr vrating=1k type=2 vmax=4.38 vmin=0 ka=20 \
                ta=0.02 kf=0.001 tf=1 ke=1 te=1.98 tr=0.001 ae=0.0006 be=0.9
 
 T31   pm31  omega31 powertg type=1 omegaref=1 r=0.02 pmax=10 pmin=0 ts=0.1 \
-                            tc=0.45 t3=0 t4=12 t5=50 gen="Pg31" dza=DZA
+                            tc=0.45 t3=0 t4=12 t5=50 gen="Pg31" dza=DZA_WIDE
 
 Pg31 bus31 avr31 pm31 omega31 powergenerator pg=(1+LAMBDA)*5.729300e+00 \
     vg=1.040000e+00 \
@@ -150,7 +149,7 @@ E39  bus39  avr39 poweravr vrating=1k type=2 vmax=4.38 vmin=0 ka=20 \
                ta=0.02 kf=0.001 tf=1 ke=1 te=1.98 tr=0.001 ae=0.0006 be=0.9
 
 T39  tg39  omega39 powertg type=1 omegaref=1 r=0.02 pmax=12 pmin=0 ts=0.1 \
-                            tc=0.45 t3=0 t4=12 t5=50 gen="Pg39"  dza=DZA
+                            tc=0.45 t3=0 t4=12 t5=50 gen="Pg39"  dza=DZA_WIDE
 
 Pg39 bus39 avr39 tg39 omega39 powergenerator pg=(1+LAMBDA)*1.005729e+01 vg=1.030000e+00 \
     prating=1.000000e+08 vrating=1.000000e+03 qmax=1.500000e+01 \
