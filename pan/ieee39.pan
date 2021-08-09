@@ -40,12 +40,17 @@ Ctrl control begin
 endcontrol
 
 Dc dc nettype=1 print=yes sparse=1
+
+#ifndef LOAD_FLOW_ONLY
+
 Pz pz nettype=1 mem=["invmtrx"]
 
 Tr1 tran stop=TSTOP/2 nettype=1 restart=1 annotate=3 method=1 timepoints=1/FRAND forcetps=1 maxiter=65 saman=yes sparse=2
 Tr2 tran stop=TSTOP   nettype=1 restart=1 annotate=3 method=1 timepoints=1/FRAND forcetps=1 maxiter=65 saman=yes sparse=2
 
-#endif
+#endif // LOAD_FLOW_ONLY
+
+#endif // PAN
 
 
 begin power

@@ -172,7 +172,7 @@ def slide_window(X, window_size, overlap=None, window_step=None, N_windows=-1):
     if window_step is None:
         window_step = int(window_size * overlap)
     if N_windows <= 0:
-        N_windows = int((X.size - window_size) / window_step)
+        N_windows = X.size // window_step
     idx = np.zeros((N_windows, window_size), dtype=int)
     Y = np.zeros((N_windows, window_size))
     for i in range(N_windows):
