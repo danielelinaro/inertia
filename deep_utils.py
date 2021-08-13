@@ -5,7 +5,7 @@ import tables
 import numpy as np
 
 
-__all__ = ['read_inertia_values', 'load_one_block', 'load_data_areas', 'load_data_generators', 'load_data_slide', 'predict', 'slide_window']
+__all__ = ['read_area_values', 'load_one_block', 'load_data_areas', 'load_data_generators', 'load_data_slide', 'predict', 'slide_window']
 
 default_H = {
     'IEEE14': {
@@ -24,7 +24,7 @@ default_H = {
 }
 
 
-def read_inertia_values(filename, generators_areas_map = None, generators_Pnom = None, area_inertia = 'energy'):
+def read_area_values(filename, generators_areas_map = None, generators_Pnom = None, area_measure = 'inertia'):
     fid = tables.open_file(filename, 'r')
     pars = fid.root.parameters.read()
     fid.close()
@@ -32,18 +32,18 @@ def read_inertia_values(filename, generators_areas_map = None, generators_Pnom =
     generator_inertias = pars['inertia'][0]
     if generators_areas_map is not None:
         N_areas = len(generators_areas_map)
-        area_inertias = np.zeros(N_areas)
+        area_measures = np.zeros(N_areas)
         for i,area_generators in enumerate(generators_areas_map):
             num, den = 0, 0
             for gen_ID in area_generators:
                 idx = generator_IDs.index(gen_ID)
                 num += generator_inertias[idx] * generators_Pnom[gen_ID]
                 den += generators_Pnom[gen_ID]
-                if area_inertia.lower() == 'energy':
-                    area_inertias[i] = num * 1e-9         # [GW s]
-                elif area_inertia.lower() == 'coi':
-                    area_inertias[i] = num / den * 1e-9   # [s]
-        return generator_IDs, generator_inertias, area_inertias
+                if area_measure.lower() == 'energy':
+                    area_measures[i] = num * 1e-9         # [GW s]
+                elif area_measure.lower() == 'inertia':
+                    area_measures[i] = num / den * 1e-9   # [s]
+        return generator_IDs, generator_inertias, area_measures
     return generator_IDs, generator_inertias
 
 
@@ -84,14 +84,17 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, d
     return time.astype(dtype), X, inertia, generator_IDs
 
 
-def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_inertia,
+def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure,
                     max_block_size = np.inf, dtype = np.float32, use_tf = True, add_omega_ref = True):
+    """
+    area_measure - whether Y should contain the inertia of the coi or the total energy of the area
+    """
     # Note: dtype should be a NumPy type, even if use_tf = True
     X = {}
     Y = {}
 
-    if area_inertia.lower() not in ('energy', 'coi'):
-        raise Exception('area_inertia must be one of "energy" or "COI"')
+    if area_measure.lower() not in ('energy', 'inertia'):
+        raise Exception('area_measure must be one of "energy" or "inertia"')
 
     n_areas = len(generators_areas_map)
     for key in data_files:
@@ -105,10 +108,10 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
                     idx = generator_IDs.index(gen_ID)
                     num += h[idx] * generators_Pnom[gen_ID]
                     den += generators_Pnom[gen_ID]
-                if area_inertia.lower() == 'energy':
+                if area_measure.lower() == 'energy':
                     y[i] = num * 1e-9         # [GW s]
-                elif area_inertia.lower() == 'coi':
-                    y[i] = num / den * 1e-9   # [s]
+                elif area_measure.lower() == 'inertia':
+                    y[i] = num / den          # [s]
             y = np.tile(y, [x.shape[1], 1])
             try:
                 X[key] = np.concatenate((X[key], x), axis=1)

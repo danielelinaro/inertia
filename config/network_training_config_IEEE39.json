@@ -1,15 +1,18 @@
 {
     "area_IDs": [1],
+    "data_dirs": ["data/IEEE39/var_H_area_{}/IEEE39_D=2_DZA=60.0"],
+    "area_IDs_to_learn_inertia": [1],
     "generators_areas_map": [
-	["Pg31", "Pg32", "Pg39"]
+	["Pg31", "Pg32", "Pg39"],
+	["Pg33", "Pg34", "Pg35", "Pg36"],
+	["Pg37", "Pg38", "Pg30"]
     ],
     "generators_Pnom": {
 	"Pg30": 100e6, "Pg31": 100e6, "Pg32": 100e6, "Pg33": 100e6, "Pg34": 100e6,
 	"Pg35": 100e6, "Pg36": 100e6, "Pg37": 100e6, "Pg38": 100e6, "Pg39": 100e6
     },
-    "area_inertia": "energy",
-    "data_dirs": ["data/IEEE39/var_H_area_{}/IEEE39_D=2_DZA=60.0"],
-    "var_names": ["Pe_bus3", "Vd_bus3", "Vq_bus3", "Pe_bus14", "Vd_bus14", "Vq_bus14", "Pe_bus17", "Vd_bus17", "Vq_bus17"],
+    "area_measure": "inertia",
+    "var_names": ["Pe_bus3", "Vd_bus3", "Vq_bus3", "Pe_bus14", "Vd_bus14", "Vq_bus14"],
     "max_block_size": 500,
     "normalization": "training_set",
     "comet_experiment_tags": ["H_G1_500", "stoch_load_bus_3"],

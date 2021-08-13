@@ -16,4 +16,4 @@ run_me.sh
 notebooks/*.pdf
 notebooks/*.png
 *.h5
-
+nohup.out

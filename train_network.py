@@ -372,11 +372,12 @@ if __name__ == '__main__':
         max_block_size = np.inf
 
     if entity_name == 'area':
+        generators_areas_map = [config['generators_areas_map'][i-1] for i in config['area_IDs_to_learn_inertia']]
         time, x, y = load_data_areas(data_files,
                                      var_names,
-                                     config['generators_areas_map'],
+                                     generators_areas_map,
                                      config['generators_Pnom'],
-                                     config['area_inertia'],
+                                     config['area_measure'],
                                      max_block_size)
     else:
         print('This part is not implemented yet')
@@ -441,7 +442,6 @@ if __name__ == '__main__':
             print(f'vars  = {x_train_std[j] ** 2:12.4e}, {w[1][0]:12.4e}')
 
     model.summary()
-
     if log_to_comet:
         experiment.log_parameters(parameters)
 
@@ -461,6 +461,7 @@ if __name__ == '__main__':
     if log_to_comet:
         # add a bunch of tags to the experiment
         experiment.add_tag('neural_network')
+        experiment.add_tag('area_measure_' + config['area_measure'])
         if 'IEEE14' in config['data_dirs'][0]:
             experiment.add_tag('IEEE14')
             experiment.add_tag('_'.join([f'G{gen_id}' for gen_id in config['generator_IDs']]))
@@ -473,7 +474,7 @@ if __name__ == '__main__':
         elif 'IEEE39' in config['data_dirs'][0]:
             bus_names = np.unique([int(re.findall('\d+', var_name)[0]) for var_name in config['var_names']])
             experiment.add_tag('IEEE39')
-            experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs']]))
+            experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs_to_learn_inertia']]))
             experiment.add_tag('buses_' + '-'.join([str(bus_name) for bus_name in bus_names]))
         experiment.add_tag(str(config['model_arch']['N_dims']) + 'D_pipeline')
         D = int(re.findall('D=\d', config['data_dirs'][0])[0].split('=')[1])
@@ -491,8 +492,11 @@ if __name__ == '__main__':
         if config['model_arch']['preproc_activation'] is None:
             experiment.add_tag('ReLU_none')
         else:
-            experiment.add_tag(config['model_arch']['preproc_activation'] + '_' + \
-                               config['model_arch']['activation_loc'])
+            activation_fun = config['model_arch']['preproc_activation']
+            if activation_fun.lower() == 'relu':
+                # make sure the spelling is correct
+                activation_fun = 'ReLU'
+            experiment.add_tag(activation_fun + '_' + config['model_arch']['activation_loc'])
         try:
             for tag in config['comet_experiment_tags']:
                 experiment.add_tag(tag)
