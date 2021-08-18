@@ -39,10 +39,12 @@ def read_area_values(filename, generators_areas_map = None, generators_Pnom = No
                 idx = generator_IDs.index(gen_ID)
                 num += generator_inertias[idx] * generators_Pnom[gen_ID]
                 den += generators_Pnom[gen_ID]
-                if area_measure.lower() == 'energy':
-                    area_measures[i] = num * 1e-9         # [GW s]
-                elif area_measure.lower() == 'inertia':
-                    area_measures[i] = num / den * 1e-9   # [s]
+                if area_measure.lower() == 'inertia':
+                    area_measures[i] = num / den   # [s]
+                elif area_measure.lower() == 'energy':
+                    area_measures[i] = num * 1e-9  # [GW s]
+                elif area_measure.lower() == 'momentum':
+                    area_measures[i] = 2 * num * 1e-9 / 60.  # [GW s^2]
         return generator_IDs, generator_inertias, area_measures
     return generator_IDs, generator_inertias
 
@@ -93,8 +95,8 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
     X = {}
     Y = {}
 
-    if area_measure.lower() not in ('energy', 'inertia'):
-        raise Exception('area_measure must be one of "energy" or "inertia"')
+    if area_measure.lower() not in ('inertia', 'energy', 'momentum'):
+        raise Exception('area_measure must be one of "inertia", "energy" or "momentum"')
 
     n_areas = len(generators_areas_map)
     for key in data_files:
@@ -108,10 +110,12 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
                     idx = generator_IDs.index(gen_ID)
                     num += h[idx] * generators_Pnom[gen_ID]
                     den += generators_Pnom[gen_ID]
-                if area_measure.lower() == 'energy':
-                    y[i] = num * 1e-9         # [GW s]
-                elif area_measure.lower() == 'inertia':
+                if area_measure.lower() == 'inertia':
                     y[i] = num / den          # [s]
+                elif area_measure.lower() == 'energy':
+                    y[i] = num * 1e-9         # [GW s]
+                elif area_measure.lower() == 'momentum':
+                    y[i] = 2 * num * 1e-9 / 60.  # [GW s^2]
             y = np.tile(y, [x.shape[1], 1])
             try:
                 X[key] = np.concatenate((X[key], x), axis=1)

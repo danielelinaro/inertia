@@ -568,7 +568,8 @@ if __name__ == '__main__':
     y_max = np.max(y['training'], axis=0)
     y_min = np.min(y['training'], axis=0)
     for i in range(N_entities):
-        limits = [y_min[i], y_max[i]+1]
+        dy = (y_max[i] - y_min[i]) * 0.05
+        limits = [y_min[i] - dy, y_max[i] + dy]
         ax[i+2].plot(limits, limits, 'g--')
         ax[i+2].plot(y['test'][i * block_size : (i+1) * block_size, i], \
                      y_prediction[i * block_size : (i+1) * block_size, i], 'o', \
@@ -579,7 +580,7 @@ if __name__ == '__main__':
             s = np.std(y_prediction[idx + i * block_size, i])
             ax[i+2].plot(y_target + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
             ax[i+2].plot(y_target, m, 'ms', markersize=6, markerfacecolor='w', markeredgewidth=2)
-        ax[i+2].axis([limits[0] - 1, limits[1] + 1, limits[0] - 1, limits[1] + 1])
+        ax[i+2].axis([limits[0] - dy, limits[1] + dy, limits[0] - dy, limits[1] + dy])
         ax[i+2].set_xlabel('Expected value')
         ax[i+2].set_title(f'{entity_name.capitalize()} {entity_IDs[i]}')
     ax[2].set_ylabel('Predicted value')
