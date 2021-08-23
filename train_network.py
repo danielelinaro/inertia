@@ -299,6 +299,7 @@ if __name__ == '__main__':
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='configuration file')
     parser.add_argument('-o', '--output-dir',  default='experiments',  type=str, help='output directory')
+    parser.add_argument('--area-measure',  default=None,  type=str, help='area measure (overrides value in configuration file)')
     parser.add_argument('--max-cores',  default=None,  type=int, help='maximum number of cores to be used by Keras)')
     parser.add_argument('--no-comet', action='store_true', help='do not use CometML to log the experiment')
     args = parser.parse_args(args=sys.argv[1:])
@@ -313,6 +314,10 @@ if __name__ == '__main__':
         seed = int.from_bytes(fid.read(4), 'little')
     tf.random.set_seed(seed)
     print_msg('Seed: {}'.format(seed))
+
+    if args.area_measure is not None:
+        config['area_measure'] = args.area_measure
+        print_msg(f'Setting area measure equal to "{args.area_measure}".')
 
     if args.max_cores is not None:
         config['max_cores'] = args.max_cores
