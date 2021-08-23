@@ -299,6 +299,7 @@ if __name__ == '__main__':
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='configuration file')
     parser.add_argument('-o', '--output-dir',  default='experiments',  type=str, help='output directory')
+    parser.add_argument('--area-measure',  default=None,  type=str, help='area measure (overrides value in configuration file)')
     parser.add_argument('--max-cores',  default=None,  type=int, help='maximum number of cores to be used by Keras)')
     parser.add_argument('--no-comet', action='store_true', help='do not use CometML to log the experiment')
     args = parser.parse_args(args=sys.argv[1:])
@@ -313,6 +314,10 @@ if __name__ == '__main__':
         seed = int.from_bytes(fid.read(4), 'little')
     tf.random.set_seed(seed)
     print_msg('Seed: {}'.format(seed))
+
+    if args.area_measure is not None:
+        config['area_measure'] = args.area_measure
+        print_msg(f'Setting area measure equal to "{args.area_measure}".')
 
     if args.max_cores is not None:
         config['max_cores'] = args.max_cores
@@ -568,7 +573,8 @@ if __name__ == '__main__':
     y_max = np.max(y['training'], axis=0)
     y_min = np.min(y['training'], axis=0)
     for i in range(N_entities):
-        limits = [y_min[i], y_max[i]+1]
+        dy = (y_max[i] - y_min[i]) * 0.05
+        limits = [y_min[i] - dy, y_max[i] + dy]
         ax[i+2].plot(limits, limits, 'g--')
         ax[i+2].plot(y['test'][i * block_size : (i+1) * block_size, i], \
                      y_prediction[i * block_size : (i+1) * block_size, i], 'o', \
@@ -579,7 +585,7 @@ if __name__ == '__main__':
             s = np.std(y_prediction[idx + i * block_size, i])
             ax[i+2].plot(y_target + np.zeros(2), m + s * np.array([-1,1]), 'm-', linewidth=2)
             ax[i+2].plot(y_target, m, 'ms', markersize=6, markerfacecolor='w', markeredgewidth=2)
-        ax[i+2].axis([limits[0] - 1, limits[1] + 1, limits[0] - 1, limits[1] + 1])
+        ax[i+2].axis([limits[0] - dy, limits[1] + dy, limits[0] - dy, limits[1] + dy])
         ax[i+2].set_xlabel('Expected value')
         ax[i+2].set_title(f'{entity_name.capitalize()} {entity_IDs[i]}')
     ax[2].set_ylabel('Predicted value')
