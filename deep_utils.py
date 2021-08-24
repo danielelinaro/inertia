@@ -197,19 +197,20 @@ def load_data_generators(folders, generator_IDs, inertia_values, var_names,
     return time, X, Y
 
             
-def slide_window(X, window_size, overlap=None, window_step=None, N_windows=-1):
-    if overlap is not None and window_step is not None:
-        raise 'Only one of "overlap" and "window_step" should be passed'
-    if overlap is None and window_step is None:
-        raise 'One of "overlap" and "window_step" must be passed'
-    if window_step is None:
-        window_step = int(window_size * overlap)
+def slide_window(X, window_size, overlap=None, window_step_size=None, N_windows=-1):
+    # window_size and window_step_size are in units of samples
+    if overlap is not None and window_step_size is not None:
+        raise 'Only one of "overlap" and "window_step_size" should be passed'
+    if overlap is None and window_step_size is None:
+        raise 'One of "overlap" and "window_step_size" must be passed'
+    if window_step_size is None:
+        window_step_size = int(window_size * overlap)
     if N_windows <= 0:
-        N_windows = X.size // window_step
+        N_windows = (X.size - window_size) // window_step_size
     idx = np.zeros((N_windows, window_size), dtype=int)
     Y = np.zeros((N_windows, window_size))
     for i in range(N_windows):
-        idx[i,:] = i * window_step + np.r_[0 : window_size]
+        idx[i,:] = i * window_step_size + np.r_[0 : window_size]
         try:
             Y[i,:] = X[idx[i,:]]
         except:
@@ -217,14 +218,18 @@ def slide_window(X, window_size, overlap=None, window_step=None, N_windows=-1):
             break
     return Y, idx
 
-def load_data_slide(data_files, var_names, data_mean = None, data_std = None, window_dur = 60, window_step = 10, ttran = 0, normalize_sliding=False, add_omega_ref=True, verbose=False):
+def load_data_slide(data_files, var_names, data_mean = None, data_std = None, window_dur = 60, window_step = 1,
+                    ttran = 0, normalize_sliding=False, add_omega_ref=True, verbose=False):
+    # window_dur and window_step are in units of seconds
     fids = [tables.open_file(data_file, 'r') for data_file in data_files]
     n_files = len(data_files)
     params = fids[0].root.parameters.read()
     dt = 1 / params['frand'][0]
     window_size = int(window_dur / dt)
+    window_step_size = int(window_step / dt)
     if verbose:
-        print('Window size: {:d} samples'.format(window_size))
+        print(f'Window size: {window_size} samples')
+        print(f'Window step size: {window_step_size} samples')
     time = [fids[0].root.time.read()]
     for i in range(1, n_files):
         time.append(fids[i].root.time.read() + time[i-1][-1])
@@ -257,7 +262,7 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
     for var_name in var_names:
         data_sliding[var_name], indexes[var_name] = slide_window(data_to_split[var_name],
                                                                  window_size,
-                                                                 window_step=window_step)
+                                                                 window_step_size=window_step_size)
         if normalize_sliding:
             if data_mean is None:
                 mu = np.tile(data_sliding[var_name].mean(axis=1), [data_sliding[var_name].shape[1], 1]).T
@@ -278,7 +283,8 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
     return time, data, data_normalized, data_sliding, indexes
 
 
-def predict(model, data_sliding, window_step, dt, rolling_length=50):
+def predict(model, data_sliding, window_step, rolling_length=50):
+    # window_step is in seconds
     import tensorflow as tf
     import pandas as pd
     var_names = data_sliding.keys()
@@ -293,7 +299,7 @@ def predict(model, data_sliding, window_step, dt, rolling_length=50):
     n_samples, n_outputs = y.shape
     data = {f'inertia_{i}': y[:,i] for i in range(n_outputs)}
     H = pd.DataFrame(data).rolling(rolling_length).mean().to_numpy()
-    time = np.arange(n_samples) * window_step * dt
+    time = np.arange(n_samples) * window_step
     return time, H, y
 
 def collect_experiments(area_ID, network_name = 'IEEE39',
