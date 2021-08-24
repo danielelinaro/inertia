@@ -41,7 +41,7 @@ class LearningRateCallback(keras.callbacks.Callback):
             self.experiment.log_metric('learning_rate', lr, self.step)
 
 
-def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation_fun, activation_loc):
+def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation_fun, activation_loc, count=None):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
             raise Exception(f'Unknown activation function {activation_fun}')
@@ -51,9 +51,9 @@ def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
     base_name = input_layer.name
     for n,(N_conv,N_pooling,sz) in enumerate(zip(N_units['conv'], N_units['pooling'], kernel_size)):
-        conv_lyr_name = base_name + f'_conv{n+1}'
-        activ_lyr_name = base_name + f'_relu{n+1}'
-        pool_lyr_name = base_name + f'_pool{n+1}'
+        conv_lyr_name = base_name + (f'_conv_{count}_{n+1}' if count is not None else f'_conv_{n+1}')
+        activ_lyr_name = base_name + (f'_relu-{count}_{n+1}' if count is not None else f'_relu_{n+1}')
+        pool_lyr_name = base_name + (f'_pool_{count}_{n+1}' if count is not None else f'_pool_{n+1}')
         try:
             L = layers.Conv1D(N_conv, sz, activation=None, name=conv_lyr_name)(L)
         except:
@@ -70,7 +70,7 @@ def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation
     return L
 
 
-def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, activation_fun, activation_loc):
+def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, activation_fun, activation_loc, count=None):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
             raise Exception(f'Unknown activation function {activation_fun}')
@@ -80,9 +80,9 @@ def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, activation
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
     base_name = input_layer.name
     for n,(N_conv,N_pooling,sz) in enumerate(zip(N_units['conv'], N_units['pooling'], kernel_size)):
-        conv_lyr_name = base_name + f'_conv{n+1}'
-        activ_lyr_name = base_name + f'_relu{n+1}'
-        pool_lyr_name = base_name + f'_pool{n+1}'
+        conv_lyr_name = base_name + (f'_conv_{count}_{n+1}' if count is not None else f'_conv_{n+1}')
+        activ_lyr_name = base_name + (f'_relu_{count}_{n+1}' if count is not None else f'_relu_{n+1}')
+        pool_lyr_name = base_name + (f'_pool_{count}_{n+1}' if count is not None else f'_pool_{n+1}')
         try:
             L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None, name=conv_lyr_name)(L)
         except:
@@ -182,9 +182,45 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, \
     batch_norm = config['normalization'].lower() == 'batch'
     normalization_layer = config['normalization'].lower() == 'layer'
 
+    def make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, count):
+        if N_dims == 1:
+            L = []
+            for input_layer in input_layers:
+                lyr = make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, \
+                                                     activation_fun, activation_loc, count)
+                L.append(lyr)
+        else:
+            L = make_preprocessing_pipeline_2D(input_layers[0], N_units, kernel_size, \
+                                               activation_fun, activation_loc, count)
+        return L
+
+    def make_dense_stream(L, N_units, N_outputs, model_arch, count):
+        for i,n in enumerate(N_units['dense']):
+            L = layers.Dense(n, activation='relu', name=f'fc_{count}_{i+1}')(L)
+        if model_arch['dropout_coeff'] > 0:
+            L = layers.Dropout(model_arch['dropout_coeff'], name=f'dropout_{count}')(L)
+        output = layers.Dense(N_outputs, name=f'predictions_{count}')(L)
+        return output
+
+    def make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, N_outputs, model_arch, count):
+        L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, count)
+        if isinstance(L, list):
+            L = layers.concatenate(L, name=f'concat_{count}')
+        L = layers.Flatten(name=f'flatten_{count}')(L)
+        return make_dense_stream(L, N_units, N_outputs, model_arch, count)
+
+    if 'use_multiple_streams' in config:
+        streams_mode = config['use_multiple_streams']
+        if streams_mode not in (0, 1, 2, 3):
+            raise Exception('Unknown value for "use_multiple_streams" parameter')
+    else:
+        streams_mode = 0
+
+    N_outputs = len(config['area_IDs_to_learn_inertia'])
+
     if N_dims == 1:
         inputs = []
-        L = []
+        input_layers = []
         for var_name in var_names:
             input_layer = keras.Input(shape=(N_samples, 1), name=var_name)
             inputs.append(input_layer)
@@ -192,9 +228,7 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, \
                 input_layer = layers.BatchNormalization()(input_layer)
             elif normalization_layer:
                 input_layer = layers.experimental.preprocessing.Normalization()(input_layer)
-            lyr = make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, \
-                                                 activation_fun, activation_loc)
-            L.append(lyr)
+            input_layers.append(input_layer)
     else:
         inputs = keras.Input(shape=(N_samples, 2, 1), name='_'.join(var_names))
         if batch_norm:
@@ -203,22 +237,38 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, \
             input_layer = layers.experimental.preprocessing.Normalization()(inputs)
         else:
             input_layer = inputs
-        L = make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, \
-                                           activation_fun, activation_loc)
+        input_layers = [input_layer]
 
-    if isinstance(L, list):
-        L = layers.concatenate(L)
-    L = layers.Flatten(name='flatten')(L)
-    for i,n in enumerate(N_units['dense']):
-        L = layers.Dense(n, activation='relu', name=f'fc{i+1}')(L)
-    if model_arch['dropout_coeff'] > 0:
-        L = layers.Dropout(model_arch['dropout_coeff'], name='dropout')(L)
-    output = layers.Dense(y['training'].shape[1], name='predictions')(L)
+    if streams_mode == 0:
+        # just one stream
+        outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
+                                    activation_loc, y['training'].shape[1], model_arch, 1)]
+    elif streams_mode == 1:
+        # common preprocessing stream and then one stream of dense layers for each output
+        L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, 1)
+        if isinstance(L, list):
+            L = layers.concatenate(L, name='concat_1')
+        L = layers.Flatten(name='flatten_1')(L)
+        outputs = [make_dense_stream(L, N_units, 1, model_arch, i+1) for i in range(N_outputs)]
 
-    model = keras.Model(inputs=inputs, outputs=output)
+    elif streams_mode == 2:
+        # one preprocessing stream for each output and then one common stream of dense layers
+        L = [make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
+                                       activation_loc, i+1) for i in range(N_outputs)]
+        if isinstance(L[0], list):
+            L = layers.concatenate([l for LL in L for l in LL], name='concat_1')
+        else:
+            L = layers.concatenate(L, name='concat_1')
+        L = layers.Flatten(name='flatten_1')(L)
+        outputs = make_dense_stream(L, N_units, N_outputs, model_arch, 1)
 
+    elif streams_mode == 3:
+        # one full stream for each output
+        outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
+                                    activation_loc, 1, model_arch, i+1) for i in range(N_outputs)]
+
+    model = keras.Model(inputs=inputs, outputs=outputs)
     model.compile(optimizer=optimizer, loss=loss)
-
     return model, optimizer, loss
 
 
@@ -385,10 +435,8 @@ if __name__ == '__main__':
                                      config['area_measure'],
                                      max_block_size)
     else:
-        print('This part is not implemented yet')
+        raise Exception('This part is not implemented yet')
         # call load_data_generators in deep_utils
-        import ipdb
-        ipdb.set_trace()
 
     N_vars, N_training_traces, N_samples = x['training'].shape
 
@@ -447,6 +495,7 @@ if __name__ == '__main__':
             print(f'vars  = {x_train_std[j] ** 2:12.4e}, {w[1][0]:12.4e}')
 
     model.summary()
+
     if log_to_comet:
         experiment.log_parameters(parameters)
 
@@ -481,6 +530,10 @@ if __name__ == '__main__':
             experiment.add_tag('IEEE39')
             experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs_to_learn_inertia']]))
             experiment.add_tag('buses_' + '-'.join([str(bus_name) for bus_name in bus_names]))
+        try:
+            experiment.add_tag('streams_arch_{}'.format(config['use_multiple_streams']))
+        except:
+            experiment.add_tag('streams_arch_0')
         experiment.add_tag(str(config['model_arch']['N_dims']) + 'D_pipeline')
         D = int(re.findall('D=\d', config['data_dirs'][0])[0].split('=')[1])
         DZA = float(re.findall('DZA=\d+.\d+', config['data_dirs'][0])[0].split('=')[1])
@@ -532,6 +585,9 @@ if __name__ == '__main__':
     else:
         y_prediction = best_model.predict({var_name: x['test'][i] for i,var_name
                                                       in enumerate(var_names)})
+
+    if isinstance(y_prediction, list):
+        y_prediction = np.squeeze(np.array(y_prediction).T)
 
     ### compute the mean absolute percentage error on the CNN prediction
     y_test = np.squeeze(y['test'].numpy())
