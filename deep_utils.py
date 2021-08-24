@@ -104,7 +104,7 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, d
     dt = np.diff(time[:2])[0]
     orig_n_trials, orig_n_samples = X[0].shape
     n_samples = int(trial_dur / dt)
-    n_trials = int(orig_n_trials * orig_n_samples / n_samples)
+    n_trials = orig_n_trials * (orig_n_samples // n_samples)
     time = time[:n_samples]
     stop = orig_n_samples % n_samples
     X = np.array([np.reshape(x[:,:orig_n_samples-stop], [n_trials, n_samples], order='C') for x in X], dtype=dtype)
