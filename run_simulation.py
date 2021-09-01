@@ -17,7 +17,8 @@ if __name__ == '__main__':
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='PAN netlist')
-    parser.add_argument('-o', '--output',  default=None,  type=str, help='output file name')
+    parser.add_argument('-o', '--output',  default=None, type=str, help='output file name')
+    parser.add_argument('--overload',  default=None, type=float, help='overload coefficient (overwrites the value in the config file)')
     parser.add_argument('-f', '--force', action='store_true', help='force overwrite of output file')
     parser.add_argument('--check-stability', action='store_true',
                         help='check that the system is stable by running a pole-zero analysis')
@@ -46,22 +47,6 @@ if __name__ == '__main__':
         else:
             raise Exception(f'Wrong number of inertia values for generator {gen_id}')
     inertia_values = np.array(inertia_values)
-
-    if args.output is None:
-        output_file = os.path.splitext(os.path.basename(pan_file))[0] + '_' + \
-            '_'.join(['-'.join(map(lambda h: f'{h:.3f}', np.unique(H))) for H in inertia_values]) + '.h5'
-    else:
-        output_file = args.output
-
-    try:
-        # we check whether the file exists in this way because if it doesn't
-        # pan crashes due to errno being somehow set to 2 ("No such file or directory"
-        # error).
-        import pathlib
-        pathlib.Path(output_file).touch(mode=0o644, exist_ok=args.force)
-    except:
-        print('{}: {}: file exists: use -f to overwrite.'.format(progname, output_file))
-        sys.exit(2)
 
     try:
         integration_mode = config['integration_mode'].lower()
@@ -114,7 +99,10 @@ if __name__ == '__main__':
 
     D = config['damping']
     DZA = config['DZA'] / config['frequency']
-    LAMBDA = config['lambda']
+    if args.overload is not None:
+        LAMBDA = args.overload
+    else:
+        LAMBDA = config['lambda']
     COEFF = config['coeff']
 
     pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
@@ -141,6 +129,30 @@ if __name__ == '__main__':
         mu             = tables.Float64Col(shape=(N_random_loads,))
         c              = tables.Float64Col(shape=(N_random_loads,))
         tstop          = tables.Float64Col(shape=(N_blocks,))
+
+    if args.output is None:
+        import subprocess
+        name_max = int(subprocess.check_output('getconf NAME_MAX /', shell=True))
+        output_file = os.path.splitext(os.path.basename(pan_file))[0] + '_' + \
+            '_'.join(['-'.join(map(lambda h: f'{h:.3f}', H)) for H in inertia_values])
+        if len(output_file) > name_max:
+            output_file = os.path.splitext(os.path.basename(pan_file))[0] + '_' + \
+                '_'.join(['-'.join(map(lambda h: f'{h:.3f}', np.unique(H))) for H in inertia_values])
+        if args.overload is not None:
+            output_file += f'_lambda={LAMBDA:.3f}'
+        output_file += '.h5'
+    else:
+        output_file = args.output
+
+    try:
+        # we check whether the file exists in this way because if it doesn't
+        # pan crashes due to errno being somehow set to 2 ("No such file or directory"
+        # error).
+        import pathlib
+        pathlib.Path(output_file).touch(mode=0o644, exist_ok=args.force)
+    except FileExistsError as file_error:
+        print('{}: {}: file exists: use -f to overwrite.'.format(progname, output_file))
+        sys.exit(2)
 
     fid = tables.open_file(output_file, 'w', filters=tables.Filters(complib='zlib', complevel=5))
     tbl = fid.create_table(fid.root, 'parameters', Parameters, 'parameters')
@@ -210,9 +222,12 @@ if __name__ == '__main__':
             poles = pan.PZ('Pz', mem_vars=['poles'], libs=libs, nettype=1, annotate=0)[0]
             # sort the poles in descending order and convert them to Hz
             poles = poles[np.argsort(poles.real)[::-1]] / (2 * np.pi)
-            #fid.create_array(fid.root, 'poles', poles)
             n_unstable = np.sum(poles.real > 1e-6)
             print(f'The system has {n_unstable} poles with real part > 1e-6.')
+            # save the poles to file
+            if i == 0:
+                fid.create_carray(fid.root, 'poles', atom=tables.ComplexAtom(16), shape=(len(config['tstop']), poles.size))
+            fid.root.poles[i,:] = poles
 
         try:
             data = pan.tran(tran_name, tstop, mem_vars, libs, **kwargs)
