@@ -50,7 +50,7 @@ class HashKeysDict (dict):
         dict.__setitem__(self, k, val)
 
 
-def read_area_values(filename, generators_areas_map = None, generators_Pnom = None, area_measure = 'inertia'):
+def read_area_values(filename, generators_areas_map = None, generators_Pnom = None, area_measure = 'inertia', squeeze=True):
     fid = tables.open_file(filename, 'r')
     pars = fid.root.parameters.read()
     fid.close()
@@ -58,20 +58,22 @@ def read_area_values(filename, generators_areas_map = None, generators_Pnom = No
     generator_inertias = pars['inertia'][0]
     if generators_areas_map is not None:
         N_areas = len(generators_areas_map)
-        area_measures = np.zeros(N_areas)
+        area_measures = np.zeros((N_areas, generator_inertias.shape[1]))
         for i,area_generators in enumerate(generators_areas_map):
             num, den = 0, 0
             for gen_ID in area_generators:
                 idx = generator_IDs.index(gen_ID)
                 num += generator_inertias[idx] * generators_Pnom[gen_ID]
                 den += generators_Pnom[gen_ID]
-                if area_measure.lower() == 'inertia':
-                    area_measures[i] = num / den   # [s]
-                elif area_measure.lower() == 'energy':
-                    area_measures[i] = num * 1e-9  # [GW s]
-                elif area_measure.lower() == 'momentum':
-                    area_measures[i] = 2 * num * 1e-9 / 60.  # [GW s^2]
-        return generator_IDs, generator_inertias, area_measures
+            if area_measure.lower() == 'inertia':
+                area_measures[i,:] = num / den   # [s]
+            elif area_measure.lower() == 'energy':
+                area_measures[i,:] = num * 1e-9  # [GW s]
+            elif area_measure.lower() == 'momentum':
+                area_measures[i,:] = 2 * num * 1e-9 / 60.  # [GW s^2]
+        if squeeze:
+            area_measures = np.squeeze(area_measures)
+        return generator_IDs, generator_inertias, area_measures, np.squeeze(pars['tstop'])
     return generator_IDs, generator_inertias
 
 
@@ -302,7 +304,7 @@ def predict(model, data_sliding, window_step, rolling_length=50):
     time = np.arange(n_samples) * window_step
     return time, H, y
 
-def collect_experiments(area_ID, network_name = 'IEEE39',
+def collect_experiments(area_IDs, network_name = 'IEEE39',
                         area_measure = 'inertia',
                         D=2, DZA=60, H_G1=500,
                         stoch_load_bus_IDs = [3],
@@ -317,6 +319,10 @@ def collect_experiments(area_ID, network_name = 'IEEE39',
                   experiment tag won't be used
 
     """
+
+    if np.isscalar(area_IDs):
+        area_IDs = [area_IDs]
+
     api = API(api_key = os.environ['COMET_API_KEY'])
     workspace = 'danielelinaro'
     project_name = 'inertia'
@@ -331,7 +337,7 @@ def collect_experiments(area_ID, network_name = 'IEEE39',
             Tag('1D_pipeline') & \
             Tag(stoch_load_bus_list) & \
             Tag(f'H_G1_{H_G1}') & \
-            Tag(f'area{area_ID}')
+            Tag('_'.join([f'area{ID}' for ID in area_IDs]))
 
     if len(rec_bus_IDs) > 1:
         rec_bus_list = 'buses_' + '-'.join(map(str, rec_bus_IDs))
@@ -345,6 +351,8 @@ def collect_experiments(area_ID, network_name = 'IEEE39',
 
     experiments = api.query(workspace, project_name, query, archived=False)
     n_experiments = len(experiments)
+    if n_experiments == 0:
+        return None
     expts = HashKeysDict()
     for i,experiment in enumerate(experiments):
         ID = experiment.id
@@ -378,7 +386,10 @@ def collect_experiments(area_ID, network_name = 'IEEE39',
         if verbose:
             print('  val_loss: {:.4f}'.format(expts[ID]['val_loss'].min()))
             if expts[ID]['MAPE'] is not None:
-                print('      MAPE: {:.4f}%'.format(expts[ID]['MAPE']))
+                try:
+                    print('      MAPE: {:.3f}%'.format(expts[ID]['MAPE']))
+                except:
+                    print('      MAPE: {}%'.format('%, '.join([f'{m:.3f}' for m in expts[ID]['MAPE']])))
             else:
                 print('      MAPE: [experiment not terminated]')
             print('      Tags: "{}"'.format('" "'.join(expts[ID]['tags'])))
