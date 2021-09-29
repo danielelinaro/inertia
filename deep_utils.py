@@ -56,9 +56,13 @@ def read_area_values(filename, generators_areas_map = None, generators_Pnom = No
     fid.close()
     generator_IDs = [gen_ID.decode('utf-8') for gen_ID in pars['generator_IDs'][0]]
     generator_inertias = pars['inertia'][0]
+    try:
+        N_blocks = generator_inertias.shape[1]
+    except:
+        N_blocks = 1
     if generators_areas_map is not None:
         N_areas = len(generators_areas_map)
-        area_measures = np.zeros((N_areas, generator_inertias.shape[1]))
+        area_measures = np.zeros((N_areas, N_blocks))
         for i,area_generators in enumerate(generators_areas_map):
             num, den = 0, 0
             for gen_ID in area_generators:
@@ -73,7 +77,11 @@ def read_area_values(filename, generators_areas_map = None, generators_Pnom = No
                 area_measures[i,:] = 2 * num * 1e-9 / 60.  # [GW s^2]
         if squeeze:
             area_measures = np.squeeze(area_measures)
-        return generator_IDs, generator_inertias, area_measures, np.squeeze(pars['tstop'])
+        try:
+            retval = np.squeeze(pars['tstop'])
+        except:
+            retval = None
+        return generator_IDs, generator_inertias, area_measures, retval
     return generator_IDs, generator_inertias
 
 
