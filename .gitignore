@@ -17,3 +17,4 @@ notebooks/*.pdf
 notebooks/*.png
 *.h5
 nohup.out
+*.pkl
