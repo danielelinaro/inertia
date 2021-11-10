@@ -18,3 +18,4 @@ notebooks/*.png
 *.h5
 nohup.out
 *.pkl
+figures

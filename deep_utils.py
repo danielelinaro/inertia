@@ -233,20 +233,19 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
     # window_dur and window_step are in units of seconds
     fids = [tables.open_file(data_file, 'r') for data_file in data_files]
     n_files = len(data_files)
-    params = fids[0].root.parameters.read()
-    dt = 1 / params['frand'][0]
+    time = [fids[0].root.time.read()]
+    for i in range(1, n_files):
+        time.append(fids[i].root.time.read() + time[i-1][-1])
+    time = np.concatenate(time)
+    dt = time[1] - time[0]
     window_size = int(window_dur / dt)
     window_step_size = int(window_step / dt)
     if verbose:
         print(f'Window size: {window_size} samples')
         print(f'Window step size: {window_step_size} samples')
-    time = [fids[0].root.time.read()]
-    for i in range(1, n_files):
-        time.append(fids[i].root.time.read() + time[i-1][-1])
-    time = np.concatenate(time)
     idx = time > ttran
     N_samples = time.size
-    data = {var_name: np.concatenate([fid.root[var_name].read() for fid in fids]) for var_name in var_names}
+    data = {var_name: np.squeeze(np.concatenate([fid.root[var_name].read() for fid in fids])) for var_name in var_names}
     if add_omega_ref:
         try:
             omega_ref = np.concatenate([fid.root.omega_ref.read() for fid in fids]) - 1
@@ -340,12 +339,18 @@ def collect_experiments(area_IDs, network_name = 'IEEE39',
 
     query = Tag(network_name) & \
             Tag('area_measure_' + area_measure) & \
-            Tag(f'D={D}') & \
-            Tag(f'DZA={DZA}') & \
             Tag('1D_pipeline') & \
             Tag(stoch_load_bus_list) & \
-            Tag(f'H_G1_{H_G1}') & \
             Tag('_'.join([f'area{ID}' for ID in area_IDs]))
+
+    if D is not None:
+        query &= Tag(f'D={D}')
+
+    if DZA is not None:
+        query &= Tag(f'DZA={DZA}')
+
+    if H_G1 is not None:
+        query &= Tag(f'H_G1_{H_G1}')
 
     if len(rec_bus_IDs) > 1:
         rec_bus_list = 'buses_' + '-'.join(map(str, rec_bus_IDs))
