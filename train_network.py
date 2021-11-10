@@ -535,10 +535,16 @@ if __name__ == '__main__':
         except:
             experiment.add_tag('streams_arch_0')
         experiment.add_tag(str(config['model_arch']['N_dims']) + 'D_pipeline')
-        D = int(re.findall('D=\d', config['data_dirs'][0])[0].split('=')[1])
-        DZA = float(re.findall('DZA=\d+.\d+', config['data_dirs'][0])[0].split('=')[1])
-        experiment.add_tag(f'DZA={DZA:g}')
-        experiment.add_tag(f'D={D:d}')
+        try:
+            D = int(re.findall('D=\d', config['data_dirs'][0])[0].split('=')[1])
+            experiment.add_tag(f'D={D:d}')
+        except:
+            pass
+        try:
+            DZA = float(re.findall('DZA=\d+.\d+', config['data_dirs'][0])[0].split('=')[1])
+            experiment.add_tag(f'DZA={DZA:g}')
+        except:
+            pass
         if config['normalization'].lower() == 'batch_norm':
             experiment.add_tag('batch_norm')
         elif config['normalization'].lower() == 'layer':
