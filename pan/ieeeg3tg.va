@@ -1,0 +1,61 @@
+// IEEEG3 turbine governor
+
+module IEEEG3Tg(omega,pm);
+input omega;
+output pm;
+
+electrical omega, pm;
+electrical x1, x2, x3, x4;
+electrical l1, l2;
+
+parameter real tg    = 0.050; // [s]      Gate Servomotor Time Constant
+parameter real tp    = 0.040; // [s]      Pilot Valve Time Constant
+parameter real sigma = 0.040; // [p.u.]   Permanent Droop
+parameter real delta = 0.200; // [p.u.]   Temporary Droop
+parameter real tr    = 10.00; // [s]      Governor Time Constant
+parameter real a11   = 0.500; // [p.u.]   Waterhammer 1th Factor
+parameter real a13   = 1.000; // [p.u.]   Waterhammer 2th Factor
+parameter real a21   = 1.500; // [p.u.]   Waterhammer 3th Factor
+parameter real a23   = 1.000; // [p.u.]   Waterhammer 4th Factor
+parameter real tw    = 0.750; // [s]      Water Starting Time
+parameter real uc    = -0.10; // [p.u./s] Valve Closing Time
+parameter real pmin  = 0.000; // [p.u.]   Minimum Gate Limit
+parameter real uo    = 0.100; // [p.u./s] Valve Opening Time
+parameter real pmax  = 1000;  // [p.u.]   Maximum Gate Limit
+parameter real omegaref = 1;
+
+real Pref, in;
+
+analog begin
+
+    if( analysis( "dc" ) && analysis( "restart") ) begin
+        Pref = v(pm) * sigma / a23;
+	v(l1) <+ v(pm) / a23;
+	v(l2) <+ 0;
+	v(x1) <+ 0;
+	v(x2) <+ v(pm) / a23;
+	v(x3) <+ v(pm) / a23;
+	v(x4) <+ v(pm) / a23;
+    end
+    else begin
+
+	in = (omegaref - v(omega)) + Pref - (sigma * v(l1) + v(l2));
+
+	i(x1) <+ v(x1) + tp * ddt( v(x1) ) - in / tg;
+
+	i(x2) <+ ddt( v(x2) ) - min( uo, max( uc, v(x1) ) );
+	v(l1) <+ min( pmax, max( pmin, v(x2) ) );
+
+	i(x3) <+ v(x3) + tr * ddt( v(x3) ) - v(l1);
+	v(l2) <+ delta * (v(l1) - v(x3));
+
+	i(x4) <+ v(x4) + a11 * tw * ddt( v(x4) ) - v(l1);
+
+	v(pm) <+ a23 * ( ((a11 - a13*a21/a23)*tw)/(a11*tw) * v(l1) + 
+	     (1 - ((a11 - a13*a21/a23)*tw)/(a11*tw)) * v(x4) );
+
+    end
+
+end
+
+endmodule

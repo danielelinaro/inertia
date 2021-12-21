@@ -83,6 +83,7 @@ if __name__ == '__main__':
     # simulation parameters
     frand = config['frand']        # [Hz] sampling rate of the random signal
     tstop = config['tstop'][-1]    # [s]  total simulation duration
+    decimation = config['decimation'] if 'decimation' in config else 1
     dt = 1 / frand
     t = dt + np.r_[0 : tstop + dt/2 : dt]
     N_samples = t.size
@@ -97,20 +98,8 @@ if __name__ == '__main__':
         print('Cannot load netlist from file {}.'.format(pan_file))
         sys.exit(4)
 
-    D = config['damping']
-    DZA = config['DZA'] / config['frequency']
-    if args.overload is not None:
-        LAMBDA = args.overload
-    else:
-        LAMBDA = config['lambda']
-    COEFF = config['coeff']
-
     pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
     pan.alter('Alfrand', 'FRAND',  frand,  libs, annotate=1)
-    pan.alter('Ald',     'D',      D,      libs, annotate=1)
-    pan.alter('Aldza',   'DZA',    DZA,    libs, annotate=1)
-    pan.alter('Allam',   'LAMBDA', LAMBDA, libs, annotate=1)
-    pan.alter('Alcoeff', 'COEFF',  COEFF,  libs, annotate=1)
 
     ou = [OU(dt, alpha[i], mu[i], c[i], N_samples, rnd_states[i]) for i in range(N_random_loads)]
 
@@ -163,24 +152,53 @@ if __name__ == '__main__':
     params['alpha']          = alpha
     params['mu']             = mu
     params['c']              = c
-    params['D']              = D
-    params['DZA']            = DZA
-    params['LAMBDA']         = LAMBDA
-    params['COEFF']          = COEFF
     params['F0']             = config['frequency']
     params['frand']          = frand
     params['inertia']        = inertia_values
     params['generator_IDs']  = generator_IDs
     params['rnd_load_buses'] = random_load_buses
+
+    if 'damping' in config:
+        D = config['damping']
+        pan.alter('Ald', 'D', D, libs, annotate=1)
+        params['D'] = D
+    else:
+        params['D'] = np.nan
+
+    if 'DZA' in config:
+        DZA = config['DZA'] / config['frequency']
+        pan.alter('Aldza', 'DZA', DZA, libs, annotate=1)
+        params['DZA'] = DZA
+    else:
+        params['DZA'] = np.nan
+
+    if args.overload is not None:
+        LAMBDA = args.overload
+        pan.alter('Allam', 'LAMBDA', LAMBDA, libs, annotate=1)
+        params['LAMBDA'] = LAMBDA
+    elif 'lambda' in config:
+        LAMBDA = config['lambda']
+        pan.alter('Allam', 'LAMBDA', LAMBDA, libs, annotate=1)
+        params['LAMBDA'] = LAMBDA
+    else:
+        params['LAMBDA'] = np.nan
+
+    if 'coeff' in config:
+        COEFF = config['coeff']
+        pan.alter('Alcoeff', 'COEFF', COEFF, libs, annotate=1)
+        params['COEFF'] = COEFF
+    else:
+        params['COEFF'] = np.nan
+
     params.append()
     tbl.flush()
 
     atom = tables.Float64Atom()
 
     if integration_mode == 'trapezoidal':
-        array_shape = N_samples,
+        array_shape = t[::decimation].size,
     else:
-        array_shape = N_samples - 1,
+        array_shape = t[::decimation].size - 1,
 
     for disk_var in mem_vars_map.values():
         if disk_var is not None:
@@ -190,7 +208,7 @@ if __name__ == '__main__':
                 fid.create_earray(fid.root, disk_var[0], atom, array_shape)
 
     if 'save_OU' in config and config['save_OU']:
-        fid.create_array(fid.root, 'OU', np.array(ou), atom=atom)
+        fid.create_array(fid.root, 'OU', np.array(ou)[:,::decimation], atom=atom)
 
     start = 0
     for i, tstop in enumerate(config['tstop']):
@@ -248,7 +266,7 @@ if __name__ == '__main__':
                     var = var[1:]
                 if isinstance(disk_var, str):
                     stop = start + var.size
-                    fid.root[disk_var][start : stop] = var + offset
+                    fid.root[disk_var][start : stop] = var[::decimation] + offset
                 elif isinstance(disk_var, list):
                     disk_var, orig_time_var, resampled_time_var = disk_var
                     orig_time = get_var(data, mem_vars, orig_time_var)
@@ -256,12 +274,12 @@ if __name__ == '__main__':
                     try:
                         idx = np.array([np.where(origin_time == tt)[0][0] for tt in resampled_time])
                         stop = start + idx.size
-                        fid.root[disk_var][start : stop] = var[idx] + offset
+                        fid.root[disk_var][start : stop] = var[idx][::decimation] + offset
                     except:
                         f = interp1d(orig_time, var)
                         tmp = f(resampled_time)
                         stop = start + tmp.size
-                        fid.root[disk_var][start : stop] = tmp + offset
+                        fid.root[disk_var][start : stop] = tmp[::decimation] + offset
         start = stop
 
     fid.close()

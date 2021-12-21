@@ -1,0 +1,70 @@
+// IEEEG1 turbine governor
+
+module IEEEG1Tg(omega,php,plp);
+input omega;
+output php, plp;
+
+electrical omega, php, plp;
+electrical x1, x2, x4, x5, x6, x7;
+electrical l1;
+
+parameter real k    = 5.00; // [p.u.]   Controller Gain
+parameter real t1   = 0.20; // [s]      Governor Time Constant
+parameter real t2   = 1.00; // [s]      Governor Derivative Time Constant
+parameter real t3   = 0.60; // [s]      Servo Time Constant
+parameter real k1   = 0.30; // [p.u.]   High Pressure Turbine Factor
+parameter real k2   = 0.00; // [p.u.]   High Pressure Turbine Factor
+parameter real t5   = 0.50; // [s]      Intermediate Pressure Turbine Time Cons.
+parameter real k3   = 0.25; // [p.u.]   Intermediate Pressure Turbine Factor
+parameter real k4   = 0.00; // [p.u.]   Intermediate Pressure Turbine Factor
+parameter real t6   = 0.80; // [s]      Medium Pressure Turbine Time Constant
+parameter real k5   = 0.30; // [p.u.]   Medium Pressure Turbine Factor
+parameter real k6   = 0.00; // [p.u.]   Medium Pressure Turbine Factor
+parameter real t4   = 0.60; // [s]      High Pressure Turbine Time Constant
+parameter real t7   = 1.00; // [s]      Low Pressure Turbine Time Constant
+parameter real k7   = 0.15; // [p.u.]   Low Pressure Turbine Factor
+parameter real k8   = 0.00; // [p.u.]   Low Pressure Turbine Factor
+parameter real uc   = -30;  // [p.u./s] Valve Closing Time
+parameter real pmin = 0.00; // [p.u.]   Minimum Gate Limit
+parameter real uo   = 30;   // [p.u./s] Valve Opening Time
+parameter real pmax = 1000; // [p.u.]   Maximum Gate Limit
+parameter real omegaref = 1;
+
+real Pref, in, l0;
+
+analog begin
+
+    if( analysis( "dc" ) && analysis( "restart" ) ) begin
+        Pref = v(php) / (k1 + k3 + k5 + k7);
+	v(l1) <+ Pref;
+	v(x1) <+ 0;
+	v(x2) <+ Pref;
+	v(x4) <+ Pref;
+	v(x5) <+ Pref;
+	v(x6) <+ Pref;
+	v(x7) <+ Pref;
+    end
+    else begin
+
+	in = k * (omegaref - v(omega));
+
+	i(x1) <+ v(x1) + t2 * ddt( v(x1) ) - in;
+	l0 = t1/t2*in + (1-t1/t2)*v(x1);
+
+	i(x2) <+ ddt( v(x2) ) - min( uo, max( uc, l0 + Pref - v(l1)) ) / t3;
+
+	v(l1) <+ min( pmax, max( pmin, v(x2) ) );
+
+	i(x4) <+ v(x4) + t4 * ddt( v(x4) ) - v(l1);
+	i(x5) <+ v(x5) + t5 * ddt( v(x5) ) - v(x4);
+	i(x6) <+ v(x6) + t6 * ddt( v(x6) ) - v(x5);
+	i(x7) <+ v(x7) + t7 * ddt( v(x7) ) - v(x6);
+
+	v(php) <+ (k1 * v(x4) + k3 * v(x5) + k5 * v(x6) + k7 * v(x7));
+	v(plp) <+ (k2 * v(x4) + k4 * v(x5) + k6 * v(x6) + k8 * v(x7));
+
+    end
+
+end
+
+endmodule

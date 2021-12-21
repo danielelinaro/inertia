@@ -20,10 +20,10 @@ generator_ids = {'IEEE14': (1,2,3,6,8), 'two-area': (1,2,3,4)}
 
 
 class BaseParameters (tables.IsDescription):
-    D        = tables.Float64Col()
-    DZA      = tables.Float64Col()
     F0       = tables.Float64Col()
     frand    = tables.Float64Col()
+    D        = tables.Float64Col()
+    DZA      = tables.Float64Col()
     LAMBDA   = tables.Float64Col()
     COEFF    = tables.Float64Col()
 
