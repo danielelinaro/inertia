@@ -12,18 +12,18 @@
 	"G09": [3.45],
 	"G10": [4.2]
     },
-    "random_load_buses": [3],
+    "variable_load_buses": [3],
     "OU": {
 	"alpha": [0.5],
 	"mu": [0.0],
-	"c": [0.5]
+	"c": [1.61]
     },
     "seeds": [100, 100],
-    "frand": 200.0,
+    "srate": 200.0,
     "decimation": 20,
     "frequency": 60.0,
     "tstop": [3600],
-    "save_OU": true,
+    "save_load": true,
     "mem_vars_map" : {
 	"time": "time",
 	"omegael03": "omegael_bus3",

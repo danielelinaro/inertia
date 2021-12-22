@@ -57,36 +57,51 @@ if __name__ == '__main__':
         print('{}: integration_mode must be one of "trapezoidal" or "Gear".')
         sys.exit(2)
 
-    random_load_buses = config['random_load_buses']
-    N_random_loads = len(random_load_buses)
+    variable_load_buses = config['variable_load_buses']
+    N_variable_loads = len(variable_load_buses)
     N_blocks = len(config['tstop'])
 
-    try:
-        rng_seeds = config['seeds']
-    except:
-        with open('/dev/urandom', 'rb') as fid:
-            rng_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_random_loads + N_blocks)]
-
-    if integration_mode == 'trapezoidal':
-        rng_seeds = rng_seeds[:N_random_loads]
-        pan_seeds = np.nan + np.zeros(N_blocks)
-    else:
-        rng_seeds, pan_seeds = rng_seeds[:-N_blocks], rng_seeds[-N_blocks:]
-
-    rnd_states = [RandomState(MT19937(SeedSequence(seed))) for seed in rng_seeds]
-
-    # OU parameters
-    alpha = config['OU']['alpha']
-    mu = config['OU']['mu']
-    c = config['OU']['c']
-
     # simulation parameters
-    frand = config['frand']        # [Hz] sampling rate of the random signal
+    srate = config['srate']        # [Hz] sampling rate
     tstop = config['tstop'][-1]    # [s]  total simulation duration
     decimation = config['decimation'] if 'decimation' in config else 1
-    dt = 1 / frand
+    dt = 1 / srate
     t = dt + np.r_[0 : tstop + dt/2 : dt]
     N_samples = t.size
+
+    if 'OU' in config:
+        try:
+            rng_seeds = config['seeds']
+        except:
+            with open('/dev/urandom', 'rb') as fid:
+                rng_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_variable_loads + N_blocks)]
+
+        if integration_mode == 'trapezoidal':
+            rng_seeds = rng_seeds[:N_variable_loads]
+            pan_seeds = np.nan + np.zeros(N_blocks)
+        else:
+            rng_seeds, pan_seeds = rng_seeds[:-N_blocks], rng_seeds[-N_blocks:]
+
+        rnd_states = [RandomState(MT19937(SeedSequence(seed))) for seed in rng_seeds]
+
+        # OU parameters
+        alpha = config['OU']['alpha']
+        mu = config['OU']['mu']
+        c = config['OU']['c']
+
+        var_loads = [OU(dt, alpha[i], mu[i], c[i], N_samples, rnd_states[i]) for i in range(N_variable_loads)]
+    elif 'PWL' in config:
+        PWL = [np.array(pwl) for pwl in config['PWL']]
+        var_loads = [np.zeros(N_samples) for _ in range(N_variable_loads)]
+        for var_load,pwl in zip(var_loads, PWL):
+            N_steps = pwl.shape[0]
+            for i in range(N_steps - 1):
+                idx = (t >= pwl[i, 0]) & (t < pwl[i+1, 0])
+                var_load[idx] = pwl[i, 1]
+            idx = t >= pwl[-1, 0]
+            var_load[idx] = pwl[-1, 1]
+    else:
+        var_loads = [np.zeros(N_samples) for _ in range(N_variable_loads)]
 
     mem_vars_map = config['mem_vars_map']
     mem_vars = list(mem_vars_map.keys())
@@ -97,27 +112,6 @@ if __name__ == '__main__':
     if not ok:
         print('Cannot load netlist from file {}.'.format(pan_file))
         sys.exit(4)
-
-    pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
-    pan.alter('Alfrand', 'FRAND',  frand,  libs, annotate=1)
-
-    ou = [OU(dt, alpha[i], mu[i], c[i], N_samples, rnd_states[i]) for i in range(N_random_loads)]
-
-    for i,bus in enumerate(random_load_buses):
-        exec(f'noise_samples_bus_{bus} = np.vstack((t, ou[i]))')
-
-    get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]
-
-    class Parameters (BaseParameters):
-        generator_IDs  = tables.StringCol(8, shape=(N_generators,))
-        rnd_load_buses = tables.Int64Col(shape=(N_random_loads,))
-        rng_seeds      = tables.Int64Col(shape=(N_random_loads,))
-        pan_seeds      = tables.Float64Col(shape=(N_blocks,)) # these must be floats because they might be NaN's
-        inertia        = tables.Float64Col(shape=(N_generators,N_blocks))
-        alpha          = tables.Float64Col(shape=(N_random_loads,))
-        mu             = tables.Float64Col(shape=(N_random_loads,))
-        c              = tables.Float64Col(shape=(N_random_loads,))
-        tstop          = tables.Float64Col(shape=(N_blocks,))
 
     if args.output is None:
         import subprocess
@@ -143,20 +137,49 @@ if __name__ == '__main__':
         print('{}: {}: file exists: use -f to overwrite.'.format(progname, output_file))
         sys.exit(2)
 
+    pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
+    pan.alter('Alsrate', 'SRATE',  srate,  libs, annotate=1)
+
+    for i,bus in enumerate(variable_load_buses):
+        exec(f'load_samples_bus_{bus} = np.vstack((t, var_loads[i]))')
+
+    get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]
+
+    class Parameters (BaseParameters):
+        generator_IDs  = tables.StringCol(8, shape=(N_generators,))
+        var_load_buses = tables.Int64Col(shape=(N_variable_loads,))
+        inertia        = tables.Float64Col(shape=(N_generators,N_blocks))
+        tstop          = tables.Float64Col(shape=(N_blocks,))
+
+    if 'OU' in config:
+        Parameters.__dict__['columns']['rng_seeds'] = tables.Int64Col(shape=(N_variable_loads,))
+        Parameters.__dict__['columns']['pan_seeds'] = tables.Float64Col(shape=(N_blocks,)) # these must be floats because they might be NaN's
+        for key in 'alpha','mu','c':
+            Parameters.__dict__['columns'][key] = tables.Float64Col(shape=(N_variable_loads,))
+    elif 'PWL' in config:
+        for bus,pwl in zip(variable_load_buses, PWL):
+            m,n = pwl.shape
+            Parameters.__dict__['columns'][f'PWL_bus_{bus}'] = tables.Float64Col(shape=(m,n))
+
     fid = tables.open_file(output_file, 'w', filters=tables.Filters(complib='zlib', complevel=5))
     tbl = fid.create_table(fid.root, 'parameters', Parameters, 'parameters')
     params = tbl.row
-    params['rng_seeds']      = rng_seeds
-    params['pan_seeds']      = pan_seeds
     params['tstop']          = config['tstop']
-    params['alpha']          = alpha
-    params['mu']             = mu
-    params['c']              = c
     params['F0']             = config['frequency']
-    params['frand']          = frand
+    params['srate']          = srate
     params['inertia']        = inertia_values
     params['generator_IDs']  = generator_IDs
-    params['rnd_load_buses'] = random_load_buses
+    params['var_load_buses'] = variable_load_buses
+
+    if 'OU' in config:
+        params['rng_seeds']  = rng_seeds
+        params['pan_seeds']  = pan_seeds
+        params['alpha']      = alpha
+        params['mu']         = mu
+        params['c']          = c
+    elif 'PWL' in config:
+        for bus,pwl in zip(variable_load_buses, PWL):
+            params[f'PWL_bus_{bus}'] = pwl
 
     if 'damping' in config:
         D = config['damping']
@@ -207,8 +230,8 @@ if __name__ == '__main__':
             elif isinstance(disk_var, list):
                 fid.create_earray(fid.root, disk_var[0], atom, array_shape)
 
-    if 'save_OU' in config and config['save_OU']:
-        fid.create_array(fid.root, 'OU', np.array(ou)[:,::decimation], atom=atom)
+    if 'save_load' in config and config['save_load']:
+        fid.create_array(fid.root, 'var_loads', np.array(var_loads)[:,::decimation], atom=atom)
 
     start = 0
     for i, tstop in enumerate(config['tstop']):
@@ -221,7 +244,7 @@ if __name__ == '__main__':
 
         if integration_mode == 'trapezoidal':
             kwargs['method']     = 1
-            kwargs['timepoints'] = 1 / frand
+            kwargs['timepoints'] = 1 / srate
             kwargs['forcetps']   = 1
             kwargs['maxiter']    = 65
             kwargs['saman']      = 'yes'

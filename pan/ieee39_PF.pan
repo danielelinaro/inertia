@@ -2,13 +2,12 @@ ground electrical gnd
 
 parameter PRAND=1M
 parameter TSTOP=10
-parameter FRAND=10
-parameters UC=1000 UO=1000
+parameter SRATE=10
 
 options outintnodes=yes ; pivcaching=0
 
 Al_dummy_tstop  alter param="TSTOP"  rt=yes
-Al_dummy_frand  alter param="FRAND"  rt=yes
+Al_dummy_srate  alter param="SRATE"  rt=yes
 
 #ifdef PAN
 
@@ -17,7 +16,7 @@ Ctrl control begin
     dt = 1/FRAND;
     T  = [dt:dt:TSTOP+dt];
 
-    noise_samples_bus_3  = [ T, randn( length(T) ) ];
+    load_samples_bus_3  = [ T, randn( length(T) ) ];
 
 endcontrol
 
@@ -67,7 +66,7 @@ end
 
 ; the stochastic load
 Rnd dload qload rndload RAND_L P=PRAND VRATING=345k VMAX=1.2*345k VMIN=0.8*345k
-Wav rndload gnd vsource wave="noise_samples_bus_3"
+Wav rndload gnd vsource wave="load_samples_bus_3"
 
 model RAND_L   nport veriloga="randl.va"
 ; model IEEEG1Tg nport veriloga="ieeeg1tg.va"

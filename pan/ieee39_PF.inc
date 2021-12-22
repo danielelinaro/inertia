@@ -134,27 +134,27 @@ G09 bus38 avr38 php38 omega38 powergenerator type=4 qlimits=no phtype=1 \
 		xdp=0.57 xd=2.106 xq=2.05 ra=0 \
 		td0p=4.79 xl=0.298 h=3.45 d=0 xqp=0.587 tq0p=1.96
 
-;AVR10 bus30 avr30 poweravr type=2 vrating=1.650000e+04 \
-;		ka=5.0 ta=0.06 kf=0.04 tf=1.0 ke=-0.0485 \
-;		te=0.25 tr=0.0 vmin=-1.0 vmax=1.0 e1=3.546099 \
-;		e2=4.728132 se1=0.08 se2=0.26 
+AVR10 bus30 avr30 poweravr type=2 vrating=1.650000e+04 \
+		ka=5.0 ta=0.06 kf=0.04 tf=1.0 ke=-0.0485 \
+		te=0.25 tr=0.0 vmin=-1.0 vmax=1.0 e1=3.546099 \
+		e2=4.728132 se1=0.08 se2=0.26 
 
-;GOV10 pm30 omega30 powertg type=4 \
-;		tg=0.05 tp=0.04 sigma=0.04 delta=0.2 tr=10.0 \
-;		a11=0.5 a13=1.0 a21=1.5 a23=1.0 tw=0.75 \
-;		uc=-0.1 uo=0.1 pmin=0.0 pmax=1.0 
+GOV10 pm30 omega30 powertg type=4 \
+		tg=0.05*10 tp=0.04 sigma=0.04 delta=0.2 tr=10.0 \
+		a11=0.5 a13=1.0 a21=1.5 a23=1.0 tw=0.75 \
+		uc=-0.1 uo=0.1 pmin=0.0 pmax=1.0 
 
-;G10 bus30 avr30 pm30 omega30 powergenerator type=3 qlimits=no phtype=1 \
-;		pg=0.25 vg=1.0475 prating=1.000000e+09 vrating=1.650000e+04 \
-;		qmax=0.6 qmin=-0.5 pmax=0.85 pmin=0 \
-;		xdp=0.31 xd=1 xq=0.69 ra=0 \
-;		td0p=10.2 xl=0.125 h=4.2 d=0 
-
-G10 bus30 gnd gnd omega30 powergenerator type=3 qlimits=no phtype=1 \
+G10 bus30 avr30 pm30 omega30 powergenerator type=3 qlimits=no phtype=1 \
 		pg=0.25 vg=1.0475 prating=1.000000e+09 vrating=1.650000e+04 \
 		qmax=0.6 qmin=-0.5 pmax=0.85 pmin=0 \
 		xdp=0.31 xd=1 xq=0.69 ra=0 \
 		td0p=10.2 xl=0.125 h=4.2 d=0 
+
+;G10 bus30 gnd gnd omega30 powergenerator type=3 qlimits=no phtype=1 \
+;		pg=0.25 vg=1.0475 prating=1.000000e+09 vrating=1.650000e+04 \
+;		qmax=0.6 qmin=-0.5 pmax=0.85 pmin=0 \
+;		xdp=0.31 xd=1 xq=0.69 ra=0 \
+;		td0p=10.2 xl=0.125 h=4.2 d=0 
 
 G01 bus39 gnd gnd omega39 powergenerator type=4 qlimits=no phtype=1 \
 		pg=0.1 vg=1.03 prating=1.000000e+10 vrating=3.450000e+05 \
