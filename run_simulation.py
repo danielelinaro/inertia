@@ -13,7 +13,7 @@ from build_data import BaseParameters, OU
 progname = os.path.basename(sys.argv[0])
 
 if __name__ == '__main__':
-    parser = arg.ArgumentParser(description = 'Simulate the IEEE14 network at a fixed value of inertia', \
+    parser = arg.ArgumentParser(description = 'Simulate a power network at a fixed value of inertia', \
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='PAN netlist')
@@ -230,7 +230,7 @@ if __name__ == '__main__':
             elif isinstance(disk_var, list):
                 fid.create_earray(fid.root, disk_var[0], atom, array_shape)
 
-    if 'save_load' in config and config['save_load']:
+    if 'save_var_loads' in config and config['save_var_loads']:
         fid.create_array(fid.root, 'var_loads', np.array(var_loads)[:,::decimation], atom=atom)
 
     start = 0

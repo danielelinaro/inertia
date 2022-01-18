@@ -79,14 +79,15 @@ if __name__ == '__main__':
     c = config['OU']['c']
 
     # simulation parameters
-    frand = config['frand']  # [Hz] sampling rate of the random signal
+    srate = config['srate']  # [Hz] sampling rate of the random signal
+    decimation = config['decimation'] if 'decimation' in config else 1
     if args.dur is not None:
         tstop = args.dur     # [s]  simulation duration
     else:
         tstop = config['dur']
 
     # generator IDs
-    generator_IDs = config['generator_IDs']
+    generator_IDs = list(config['inertia'].keys())
     N_generators = len(generator_IDs)
 
     # inertia values
@@ -137,12 +138,13 @@ if __name__ == '__main__':
     random_states = [RandomState(MT19937(SeedSequence(seed))) for seed in hw_seeds]
     seeds = [rs.randint(low=0, high=1000000, size=(N_inertia, N_trials)) for rs in random_states]
 
-    dt = 1 / frand
+    dt = 1 / srate
     t = dt + np.r_[0 : tstop + dt/2 : dt]
     N_samples = t.size
+    earray_shape = (0, t[::decimation].size)
     for i,bus in enumerate(random_load_buses):
-        exec(f'noise_samples_bus_{bus} = np.zeros((2, N_samples))')
-        exec(f'noise_samples_bus_{bus}[0,:] = t')
+        exec(f'load_samples_bus_{bus} = np.zeros((2, N_samples))')
+        exec(f'load_samples_bus_{bus}[0,:] = t')
 
     pan_file = config['netlist']
     if not os.path.isfile(pan_file):
@@ -166,21 +168,36 @@ if __name__ == '__main__':
 
     # reference frequency of the system
     F0 = config['F0']
-    # damping coefficient
-    D = config['D']
-    # dead-band width
-    DZA = config['DZA'] / F0
-    # overload coefficient
-    LAMBDA = config['lambda']
-    # load scaling coefficient
-    COEFF = config['coeff']
-    
     pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
-    pan.alter('Alfrand', 'FRAND',  frand,  libs, annotate=1)
-    pan.alter('Ald',     'D',      D,      libs, annotate=1)
-    pan.alter('Aldza',   'DZA',    DZA,    libs, annotate=1)
-    pan.alter('Allam',   'LAMBDA', LAMBDA, libs, annotate=1)
-    pan.alter('Alcoeff', 'COEFF',  COEFF,  libs, annotate=1)
+    pan.alter('Alsrate', 'SRATE',  srate,  libs, annotate=1)
+
+    # damping coefficient
+    if 'damping' in config:
+        D = config['damping']
+        pan.alter('Ald', 'D', D, libs, annotate=1)
+    else:
+        D = np.nan
+
+    # dead-band width
+    if 'DZA' in config:
+        DZA = config['DZA'] / F0
+        pan.alter('Aldza', 'DZA', DZA, libs, annotate=1)
+    else:
+        DZA = np.nan
+
+    # overload coefficient
+    if 'lambda' in config:
+        LAMBDA = config['lambda']
+        pan.alter('Allam', 'LAMBDA', LAMBDA, libs, annotate=1)
+    else:
+        LAMBDA = np.nan
+
+    # load scaling coefficient
+    if 'coeff' in config:
+        COEFF = config['coeff']
+        pan.alter('Alcoeff', 'COEFF',  COEFF,  libs, annotate=1)
+    else:
+        COEFF = np.nan
 
     mem_vars_map = config['mem_vars']
     mem_vars = list(mem_vars_map.keys())
@@ -215,6 +232,7 @@ if __name__ == '__main__':
         hw_seeds       = tables.Int64Col(shape=(N_random_loads,))
         seeds          = tables.Int64Col(shape=(N_random_loads,N_trials))
         count          = tables.Int64Col()
+        decimation     = tables.Int64Col()
         alpha          = tables.Float64Col(shape=(N_random_loads,))
         mu             = tables.Float64Col(shape=(N_random_loads,))
         c              = tables.Float64Col(shape=(N_random_loads,))
@@ -245,6 +263,7 @@ if __name__ == '__main__':
         params['hw_seeds']       = hw_seeds
         params['seeds']          = np.array([s[i,:] for s in seeds])
         params['count']          = i
+        params['decimation']     = decimation
         params['alpha']          = alpha
         params['mu']             = mu
         params['c']              = c
@@ -253,9 +272,9 @@ if __name__ == '__main__':
         params['LAMBDA']         = LAMBDA
         params['COEFF']          = COEFF
         params['F0']             = F0
-        params['frand']          = frand
+        params['srate']          = srate
         params['rnd_load_buses'] = random_load_buses
-        params['generator_IDs']  = config['generator_IDs']
+        params['generator_IDs']  = generator_IDs
         params['inertia']        = [inertia_values[gen_id][i] for gen_id in generator_IDs]
         params.append()
         tbl.flush()
@@ -263,13 +282,13 @@ if __name__ == '__main__':
         fid.create_array(fid.root, 'poles', poles)
 
         for bus in random_load_buses:
-            fid.create_earray(fid.root, f'noise_bus_{bus}', atom, (0, N_samples))
+            fid.create_earray(fid.root, f'load_samples_bus_{bus}', atom, earray_shape)
         for disk_var in mem_vars_map.values():
             if disk_var is not None:
                 if isinstance(disk_var, str) and disk_var != time_disk_var:
-                    fid.create_earray(fid.root, disk_var, atom, (0, N_samples))
+                    fid.create_earray(fid.root, disk_var, atom, earray_shape)
                 elif isinstance(disk_var, list):
-                    fid.create_earray(fid.root, disk_var[0], atom, (0, N_samples))
+                    fid.create_earray(fid.root, disk_var[0], atom, earray_shape)
         # close the file so that other programs can read it
         fid.close()
 
@@ -278,11 +297,11 @@ if __name__ == '__main__':
             # build the noisy samples
             for k,bus in enumerate(random_load_buses):
                 state = RandomState(MT19937(SeedSequence(seeds[k][i,j])))
-                exec(f'noise_samples_bus_{bus}[1,:] = OU(dt, alpha[k], mu[k], c[k], N_samples, state)')
+                exec(f'load_samples_bus_{bus}[1,:] = OU(dt, alpha[k], mu[k], c[k], N_samples, state)')
 
             # run a transient analysis
             data = pan.tran('Tr', tstop, mem_vars, libs, nettype=1,
-                            method=1, timepoints=1/frand, forcetps=1,
+                            method=1, timepoints=1/srate, forcetps=1,
                             maxiter=65, saman=1, sparse=2)
 
             # save the results to file
@@ -291,11 +310,11 @@ if __name__ == '__main__':
             fid = tables.open_file(out_file, 'a')
 
             for bus in random_load_buses:
-                exec(f'fid.root.noise_bus_{bus}.append(noise_samples_bus_{bus}[1, np.newaxis, :])')
+                exec(f'fid.root.load_samples_bus_{bus}.append(load_samples_bus_{bus}[1, np.newaxis, ::decimation])')
 
             if j == 0:
                 time = get_var(data, mem_vars, time_mem_var)
-                fid.create_array(fid.root, time_disk_var, time)
+                fid.create_array(fid.root, time_disk_var, time[::decimation])
 
             for k,mem_var in enumerate(mem_vars):
                 disk_var = mem_vars_map[mem_var]
@@ -305,7 +324,7 @@ if __name__ == '__main__':
                     offset = 0.
                 if disk_var is not None:
                     if isinstance(disk_var, str) and disk_var != time_disk_var:
-                        fid.root[disk_var].append(data[k][np.newaxis, :] + offset)
+                        fid.root[disk_var].append(data[k][np.newaxis, ::decimation] + offset)
                     elif isinstance(disk_var, list):
                         disk_var, orig_time_var, resampled_time_var = disk_var
                         var = get_var(data, mem_vars, mem_var)
@@ -313,10 +332,11 @@ if __name__ == '__main__':
                         resampled_time = get_var(data, mem_vars, resampled_time_var)
                         try:
                             idx = np.array([np.where(origin_time == tt)[0][0] for tt in resampled_time])
-                            fid.root[disk_var].append(var[np.newaxis, idx] + offset)
+                            var = var[idx][::decimation]
+                            fid.root[disk_var].append(var[np.newaxis, :] + offset)
                         except:
                             f = interp1d(orig_time, var)
-                            fid.root[disk_var].append(f(resampled_time)[np.newaxis, :] + offset)
+                            fid.root[disk_var].append(f(resampled_time)[np.newaxis, ::decimation] + offset)
 
             fid.close()
 
