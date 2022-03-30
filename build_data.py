@@ -13,7 +13,8 @@ import tables
 
 import pypan.ui as pan
 
-__all__ = ['BaseParameters', 'OU', 'OU_TH', 'generator_ids']
+__all__ = ['BaseParameters', 'OU', 'OU_TH', 'generator_ids',
+           'optimize_compensators_set_points', 'save_compensators_info']
 
 progname = os.path.basename(sys.argv[0])
 generator_ids = {'IEEE14': (1,2,3,6,8), 'two-area': (1,2,3,4)}
@@ -54,6 +55,57 @@ def OU_TH(dt, alpha, mu, c, N, random_state = None):
     return ou
 
 
+def optimize_compensators_set_points(compensators, pan_libs, Qmax=50, verbose=True):
+    def cost(set_points, compensators, pan_libs):
+        mem_vars = []
+        for (name,bus),vg in zip(compensators.items(), set_points):
+            pan.alter('Alvg', 'vg', vg, pan_libs, instance=name, annotate=0, invalidate=0)
+            mem_vars.append(bus + ':d')
+            mem_vars.append(bus + ':q')
+            mem_vars.append(name + ':id')
+            mem_vars.append(name + ':iq')
+        Q = np.zeros(len(compensators))
+        lf = pan.DC('Lf', mem_vars=mem_vars, libs=pan_libs, nettype=1, annotate=0)
+        for i,(Vd,Vq,Id,Iq) in enumerate(zip(lf[0::4], lf[1::4], lf[2::4], lf[3::4])):
+            V = Vd[0] + 1j * Vq[0]
+            I = Id[0] + 1j * Iq[0]
+            S = V * I.conj()
+            Q[i] = -S.imag * 1e-6
+        return Q
+
+    from scipy.optimize import fsolve
+    Vgopt = fsolve(cost, np.ones(len(compensators)), args=(compensators, pan_libs))
+    Q = cost(Vgopt, compensators, pan_libs) * 1e6 # [VAR]
+    if np.any(np.abs(Q) > Qmax):
+        raise Exception('Optimization of compensators set points failed')
+    if verbose:
+        print('Setting optimal compensators set points:')
+    for name,vg in zip(compensators, Vgopt):
+        pan.alter('Alvg', 'vg', vg, pan_libs, instance=name, annotate=3 if verbose else 0, invalidate=0)
+    return Vgopt, Q
+
+
+def save_compensators_info(fid, compensators, set_points, Q):
+    N_compensators = len(compensators)
+    names = list(compensators.keys())
+    buses = list(compensators.values())
+    name_len = max(map(len, names))
+    bus_len = max(map(len, buses))
+    class Compensators (tables.IsDescription):
+        names      = tables.StringCol(name_len, shape=(N_compensators,))
+        buses      = tables.StringCol(bus_len, shape=(N_compensators,))
+        set_points = tables.Float64Col(shape=(N_compensators,))
+        Q          = tables.Float64Col(shape=(N_compensators,))
+    tbl = fid.create_table(fid.root, 'compensators', Compensators, 'compensators info')
+    comps = tbl.row
+    comps['names']      = names
+    comps['buses']      = buses
+    comps['set_points'] = set_points
+    comps['Q']          = Q
+    comps.append()
+    tbl.flush()
+
+
 if __name__ == '__main__':
 
     parser = arg.ArgumentParser(description = 'Build data for inertia estimation with deep neural networks', \
@@ -73,6 +125,20 @@ if __name__ == '__main__':
         sys.exit(1)
     config = json.load(open(config_file, 'r'))
     
+    if 'compensators' in config and isinstance(config['compensators'], dict):
+        # these are just placeholder variables, they will be overwritten in the following
+        n = 10
+        t = np.arange(n)
+        x = np.random.uniform(size=n)
+        for bus in config['variable_load_buses']:
+            exec(f'load_samples_bus_{bus} = np.vstack((t, x))')
+        # I do this here because doing it later causes an instability in the simulation
+        # I haven't figured out why, but the problem seems to be the call to pan.DC in
+        # the function optimize_compensators_set_points
+        _,libs = pan.load_netlist(config['netlist'])
+        compensators = {}
+        compensators['vg'], compensators['Q'] = optimize_compensators_set_points(config['compensators'], libs)
+
     # OU parameters
     alpha = config['OU']['alpha']
     mu = config['OU']['mu']
@@ -129,12 +195,12 @@ if __name__ == '__main__':
         N_trials = config['Ntrials']
 
     # buses where the stochastic loads are connected
-    random_load_buses = config['random_load_buses']
-    N_random_loads = len(random_load_buses)
+    variable_load_buses = config['variable_load_buses']
+    N_variable_loads = len(variable_load_buses)
 
     # seeds for the random number generators
     with open('/dev/urandom', 'rb') as fid:
-        hw_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_random_loads)]
+        hw_seeds = [int.from_bytes(fid.read(4), 'little') % 1000000 for _ in range(N_variable_loads)]
     random_states = [RandomState(MT19937(SeedSequence(seed))) for seed in hw_seeds]
     seeds = [rs.randint(low=0, high=1000000, size=(N_inertia, N_trials)) for rs in random_states]
 
@@ -142,7 +208,7 @@ if __name__ == '__main__':
     t = dt + np.r_[0 : tstop + dt/2 : dt]
     N_samples = t.size
     earray_shape = (0, t[::decimation].size)
-    for i,bus in enumerate(random_load_buses):
+    for i,bus in enumerate(variable_load_buses):
         exec(f'load_samples_bus_{bus} = np.zeros((2, N_samples))')
         exec(f'load_samples_bus_{bus}[0,:] = t')
 
@@ -167,7 +233,7 @@ if __name__ == '__main__':
         sys.exit(2)
 
     # reference frequency of the system
-    F0 = config['F0']
+    F0 = config['frequency']
     pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
     pan.alter('Alsrate', 'SRATE',  srate,  libs, annotate=1)
 
@@ -229,14 +295,14 @@ if __name__ == '__main__':
     atom = tables.Float64Atom()
 
     class Parameters (BaseParameters):
-        hw_seeds       = tables.Int64Col(shape=(N_random_loads,))
-        seeds          = tables.Int64Col(shape=(N_random_loads,N_trials))
+        hw_seeds       = tables.Int64Col(shape=(N_variable_loads,))
+        seeds          = tables.Int64Col(shape=(N_variable_loads,N_trials))
         count          = tables.Int64Col()
         decimation     = tables.Int64Col()
-        alpha          = tables.Float64Col(shape=(N_random_loads,))
-        mu             = tables.Float64Col(shape=(N_random_loads,))
-        c              = tables.Float64Col(shape=(N_random_loads,))
-        rnd_load_buses = tables.Int64Col(shape=(N_random_loads,))
+        alpha          = tables.Float64Col(shape=(N_variable_loads,))
+        mu             = tables.Float64Col(shape=(N_variable_loads,))
+        c              = tables.Float64Col(shape=(N_variable_loads,))
+        var_load_buses = tables.Int64Col(shape=(N_variable_loads,))
         generator_IDs  = tables.StringCol(8, shape=(N_generators,))
         inertia        = tables.Float64Col(shape=(N_generators,))
 
@@ -273,15 +339,20 @@ if __name__ == '__main__':
         params['COEFF']          = COEFF
         params['F0']             = F0
         params['srate']          = srate
-        params['rnd_load_buses'] = random_load_buses
+        params['var_load_buses'] = variable_load_buses
         params['generator_IDs']  = generator_IDs
         params['inertia']        = [inertia_values[gen_id][i] for gen_id in generator_IDs]
         params.append()
         tbl.flush()
 
+        try:
+            save_compensators_info(fid, config['compensators'], compensators['vg'], compensators['Q'])
+        except:
+            pass
+
         fid.create_array(fid.root, 'poles', poles)
 
-        for bus in random_load_buses:
+        for bus in variable_load_buses:
             fid.create_earray(fid.root, f'load_samples_bus_{bus}', atom, earray_shape)
         for disk_var in mem_vars_map.values():
             if disk_var is not None:
@@ -295,7 +366,7 @@ if __name__ == '__main__':
         for j in range(N_trials):
 
             # build the noisy samples
-            for k,bus in enumerate(random_load_buses):
+            for k,bus in enumerate(variable_load_buses):
                 state = RandomState(MT19937(SeedSequence(seeds[k][i,j])))
                 exec(f'load_samples_bus_{bus}[1,:] = OU(dt, alpha[k], mu[k], c[k], N_samples, state)')
 
@@ -309,7 +380,7 @@ if __name__ == '__main__':
 
             fid = tables.open_file(out_file, 'a')
 
-            for bus in random_load_buses:
+            for bus in variable_load_buses:
                 exec(f'fid.root.load_samples_bus_{bus}.append(load_samples_bus_{bus}[1, np.newaxis, ::decimation])')
 
             if j == 0:

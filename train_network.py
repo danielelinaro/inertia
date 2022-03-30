@@ -94,15 +94,10 @@ if __name__ == '__main__':
 
     data_files = {}
     for key in 'training', 'test', 'validation':
-        all_files = [glob.glob(data_folder + '/*' + key + '_set.h5') for data_folder in data_folders]
+        all_files = [sorted(glob.glob(data_folder + '/*' + key + '_set.h5')) for data_folder in data_folders]
         data_files[key] = [item for sublist in all_files for item in sublist]
 
     var_names = config['var_names']
-
-    try:
-        max_block_size = config['max_block_size']
-    except:
-        max_block_size = np.inf
 
     if entity_name == 'area':
         generators_areas_map = [config['generators_areas_map'][i-1] for i in config['area_IDs_to_learn_inertia']]
@@ -111,7 +106,8 @@ if __name__ == '__main__':
                                      generators_areas_map,
                                      config['generators_Pnom'],
                                      config['area_measure'],
-                                     max_block_size)
+                                     trial_dur=config['trial_duration'] if 'trial_duration' in config else 60.,
+                                     max_block_size=config['max_block_size'] if 'max_block_size' in config else np.inf)
     else:
         raise Exception('This part is not implemented yet')
         # call load_data_generators in deep_utils

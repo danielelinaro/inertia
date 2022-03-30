@@ -1,6 +1,6 @@
 {
     "area_IDs": [1],
-    "data_dirs": ["data/IEEE39/converted_from_PowerFactory/var_H_area_{}"],
+    "data_dirs": ["data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_{}"],
     "area_IDs_to_learn_inertia": [1],
     "generators_areas_map": [
 	["G02", "G03"],
@@ -18,7 +18,7 @@
                   "Vd_bus17", "Vq_bus17", "Id_line_16_17", "Iq_line_16_17"],
     "max_block_size": 5000,
     "normalization": "training_set",
-    "comet_experiment_tags": ["converted_from_PowerFactory", "stoch_load_bus_3"],
+    "comet_experiment_tags": ["converted_from_PowerFactory", "all_stoch_loads"],
     "model_arch": {
 	"N_dims": 1,
 	"N_units": {

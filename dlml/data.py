@@ -96,7 +96,7 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, d
     return time.astype(dtype), X, inertia, generator_IDs
 
 
-def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure,
+def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure, trial_dur,
                     max_block_size = np.inf, dtype = np.float32, use_tf = True, add_omega_ref = True):
     """
     area_measure - whether Y should contain the inertia of the coi or the total energy of the area
@@ -111,7 +111,7 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
     n_areas = len(generators_areas_map)
     for key in data_files:
         for data_file in data_files[key]:
-            time, x, h, generator_IDs = load_one_block(data_file, var_names, 60, max_block_size, dtype, add_omega_ref)
+            time, x, h, generator_IDs = load_one_block(data_file, var_names, trial_dur, max_block_size, dtype, add_omega_ref)
             y = np.zeros(n_areas, dtype=dtype)
             for i,area_generators in enumerate(generators_areas_map):
                 num = 0
@@ -143,7 +143,7 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
     return time, X, Y
 
 
-def load_data_generators(folders, generator_IDs, inertia_values, var_names,
+def load_data_generators(folders, generator_IDs, inertia_values, var_names, trial_dur,
                          max_block_size = np.inf, dtype = np.float32, use_tf = True):
     # Note: dtype should be a NumPy type, even if use_tf = True
 
@@ -160,7 +160,7 @@ def load_data_generators(folders, generator_IDs, inertia_values, var_names,
         for key,H in inertia.items():
             for h in H:
                 filename = folder + 'H_{:.3f}_{}_set.h5'.format(h, key)
-                time, x, _ = load_one_block(filename, var_names, 60, max_block_size, dtype)
+                time, x, _ = load_one_block(filename, var_names, trial_dur, max_block_size, dtype)
                 y = np.zeros((x.shape[-2], n_outputs), dtype=dtype)
                 y[:,i] = h
                 for j in range(n_outputs):

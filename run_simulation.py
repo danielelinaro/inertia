@@ -8,7 +8,7 @@ import numpy as np
 import pypan.ui as pan
 from numpy.random import RandomState, SeedSequence, MT19937
 
-from build_data import BaseParameters, OU
+from build_data import BaseParameters, OU, optimize_compensators_set_points, save_compensators_info
 
 progname = os.path.basename(sys.argv[0])
 
@@ -30,7 +30,21 @@ if __name__ == '__main__':
         sys.exit(1)
     config = json.load(open(config_file, 'r'))
 
-    pan_file = config['pan_file']
+    if 'compensators' in config and isinstance(config['compensators'], dict):
+        # these are just placeholder variables, they will be overwritten in the following
+        n = 10
+        t = np.arange(n)
+        x = np.random.uniform(size=n)
+        for bus in config['variable_load_buses']:
+            exec(f'load_samples_bus_{bus} = np.vstack((t, x))')
+        # I do this here because doing it later causes an instability in the simulation
+        # I haven't figured out why, but the problem seems to be the call to pan.DC in
+        # the function optimize_compensators_set_points
+        _,libs = pan.load_netlist(config['netlist'])
+        compensators = {}
+        compensators['vg'], compensators['Q'] = optimize_compensators_set_points(config['compensators'], libs)
+
+    pan_file = config['netlist']
     if not os.path.isfile(pan_file):
         print('{}: {}: no such file.'.format(progname, pan_file))
         sys.exit(1)
@@ -215,6 +229,11 @@ if __name__ == '__main__':
 
     params.append()
     tbl.flush()
+
+    try:
+        save_compensators_info(fid, config['compensators'], compensators['vg'], compensators['Q'])
+    except:
+        pass
 
     atom = tables.Float64Atom()
 
