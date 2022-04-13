@@ -6,6 +6,7 @@ import json
 import argparse as arg
 from time import strftime, localtime
 import pickle
+import signal
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,7 +16,7 @@ from tensorflow import keras
 from tensorflow.keras import layers, losses, models
 
 from dlml.data import load_data_areas
-from dlml.nn import LEARNING_RATE, build_model, train_model
+from dlml.nn import LEARNING_RATE, build_model, train_model, sigint_handler
 from dlml.utils import print_msg, print_warning, print_error
 
 if __name__ == '__main__':
@@ -245,6 +246,7 @@ if __name__ == '__main__':
             pass
 
     ### train the network
+    signal.signal(signal.SIGINT, sigint_handler)
     history = train_model(model, x, y,
                           N_epochs,
                           batch_size,

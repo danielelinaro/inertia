@@ -1,5 +1,6 @@
 
 import os
+import signal
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -10,9 +11,36 @@ from .utils import print_msg, print_warning
 
 
 __all__ = ['LEARNING_RATE', 'LearningRateCallback', 'make_preprocessing_pipeline_1D',
-           'make_preprocessing_pipeline_2D', 'build_model', 'train_model', 'predict']
+           'make_preprocessing_pipeline_2D', 'build_model', 'train_model', 'predict',
+           'sigint_handler']
 
 LEARNING_RATE = []
+
+TERMINATE_TF = False
+def sigint_handler(sig, frame):
+    global TERMINATE_TF
+    if sig == signal.SIGINT:
+        first = True
+        while True:
+            if first:
+                ans = input('\nTerminate training at the end of the current training epoch? [yes/no] ').lower()
+                first = False
+            if ans == 'yes':
+                TERMINATE_TF = True
+                break
+            elif ans == 'no':
+                break
+            else:
+                ans = input('Please enter "yes" or "no": ').lower()
+
+
+class SigIntHandlerCallback(keras.callbacks.Callback):
+    def __init__(self, model):
+        self.model = model
+
+    def on_epoch_end(self, batch, logs=None):
+        self.model.stop_training = TERMINATE_TF
+
 
 class LearningRateCallback(keras.callbacks.Callback):
     def __init__(self, model, experiment = None):
@@ -282,8 +310,9 @@ def train_model(model, x, y,
                                               verbose = verbose)
     print_msg('Added callback for saving weights at checkpoint.')
 
-    cbs = [checkpoint_cb, LearningRateCallback(model, experiment)]
+    cbs = [checkpoint_cb, LearningRateCallback(model, experiment), SigIntHandlerCallback(model)]
     print_msg('Added callback for logging learning rate.')
+    print_msg('Added callback for terminating training upon SIGINT.')
 
     try:
         for cb_pars in callbacks_pars:
