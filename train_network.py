@@ -204,10 +204,21 @@ if __name__ == '__main__':
             else:
                 experiment.add_tag('_'.join([f'G{gen_id}' for gen_id in config['generator_IDs']]))
         elif 'IEEE39' in config['data_dirs'][0]:
-            bus_names = np.unique([int(re.findall('\d+', var_name)[0]) for var_name in config['var_names']])
+            bus_numbers = []
+            line_numbers = []
+            for var_name in config['var_names']:
+                if 'bus' in var_name:
+                    tmp = int(re.findall('\d+', var_name)[0])
+                    if tmp not in bus_numbers:
+                        bus_numbers.append(tmp)
+                elif 'line' in var_name:
+                    tmp = list(map(int, re.findall('\d+', var_name)))
+                    if tmp not in line_numbers:
+                        line_numbers.append(tmp)
             experiment.add_tag('IEEE39')
             experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs_to_learn_inertia']]))
-            experiment.add_tag('buses_' + '-'.join([str(bus_name) for bus_name in bus_names]))
+            experiment.add_tag('buses_' + '_'.join(map(str, bus_numbers)))
+            experiment.add_tag('lines_' + '_'.join(map(lambda l: f'{l[0]}-{l[1]}', line_numbers)))
         try:
             experiment.add_tag('streams_arch_{}'.format(config['use_multiple_streams']))
         except:
