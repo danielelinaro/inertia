@@ -22,7 +22,7 @@
     "srate": 400.0,
     "decimation": 10,
     "frequency": 60.0,
-    "tstop": [60],
+    "tstop": [600],
     "save_var_loads": true,
     "mem_vars_map" : {
 	"time": "time",

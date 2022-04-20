@@ -96,7 +96,7 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, d
     return time.astype(dtype), X, inertia, generator_IDs
 
 
-def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure, trial_dur,
+def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure, trial_dur = 60,
                     max_block_size = np.inf, dtype = np.float32, use_tf = True, add_omega_ref = True):
     """
     area_measure - whether Y should contain the inertia of the coi or the total energy of the area
