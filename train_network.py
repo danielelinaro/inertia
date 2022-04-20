@@ -266,7 +266,7 @@ if __name__ == '__main__':
 
     ### compute the network prediction on the test set
     if len(model.inputs) == 1:
-        y_prediction = best_model.predict(x['test'])
+        y_prediction = best_model.predict(tf.squeeze(x['test']))
     else:
         y_prediction = best_model.predict({var_name: x['test'][i] for i,var_name
                                                       in enumerate(var_names)})

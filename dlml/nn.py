@@ -226,7 +226,10 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
     def make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, N_outputs, model_arch, count):
         L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, count)
         if isinstance(L, list):
-            L = layers.concatenate(L, name=f'concat_{count}')
+            if len(L) == 1:
+                L = L[0]
+            else:
+                L = layers.concatenate(L, name=f'concat_{count}')
         L = layers.Flatten(name=f'flatten_{count}')(L)
         return make_dense_stream(L, N_units, N_outputs, model_arch, count)
 
@@ -264,7 +267,10 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
         # common preprocessing stream and then one stream of dense layers for each output
         L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, 1)
         if isinstance(L, list):
-            L = layers.concatenate(L, name='concat_1')
+            if len(L) == 1:
+                L = L[0]
+            else:
+                L = layers.concatenate(L, name='concat_1')
         L = layers.Flatten(name='flatten_1')(L)
         outputs = [make_dense_stream(L, N_units, 1, model_arch, i+1) for i in range(N_outputs)]
 
@@ -273,9 +279,15 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
         L = [make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
                                        activation_loc, i+1) for i in range(N_outputs)]
         if isinstance(L[0], list):
-            L = layers.concatenate([l for LL in L for l in LL], name='concat_1')
+            if len(L[0]) == 1:
+                L = L[0][0]
+            else:
+                L = layers.concatenate([l for LL in L for l in LL], name='concat_1')
         else:
-            L = layers.concatenate(L, name='concat_1')
+            if len(L) == 1:
+                L = L[0]
+            else:
+                L = layers.concatenate(L, name='concat_1')
         L = layers.Flatten(name='flatten_1')(L)
         outputs = make_dense_stream(L, N_units, N_outputs, model_arch, 1)
 
@@ -340,8 +352,8 @@ def train_model(model, x, y,
         print_warning('Not adding callbacks.')
 
     if len(model.inputs) == 1:
-        x_training = x['training']
-        x_validation = x['validation']
+        x_training = tf.squeeze(x['training'])
+        x_validation = tf.squeeze(x['validation'])
     else:
         input_names = [inp.name.split(':')[0] for inp in model.inputs]
         x_training = {name: x['training'][i] for i,name in enumerate(input_names)}
