@@ -79,7 +79,7 @@ def collect_experiments(area_IDs, network_name = 'IEEE39',
     if H_G1 is not None:
         query &= Tag(f'H_G1_{H_G1}')
 
-    if len(rec_bus_IDs) > 1:
+    if len(rec_bus_IDs) > 0:
         rec_bus_list = 'buses_' + '-'.join(map(str, rec_bus_IDs))
         query &= Tag(rec_bus_list)
 
