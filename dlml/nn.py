@@ -314,8 +314,7 @@ def train_model(model, x, y,
     os.makedirs(checkpoint_dir)
 
     # create a callback that saves the model's weights
-    checkpoint_cb = callbacks.ModelCheckpoint(filepath = checkpoint_dir + \
-                                              '/weights.{epoch:04d}-{val_loss:.6f}.h5',
+    checkpoint_cb = callbacks.ModelCheckpoint(filepath = os.path.join(checkpoint_dir, 'weights.h5'),
                                               save_weights_only = False,
                                               save_best_only = True,
                                               monitor = 'val_loss',

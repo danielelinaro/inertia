@@ -59,7 +59,7 @@ def read_area_values(filename, generators_areas_map = None, generators_Pnom = No
     return generator_IDs, generator_inertias
 
 
-def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, dtype = np.float32, add_omega_ref = True):
+def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype=np.float32, add_omega_ref=True, use_fft=False):
     """
     This function loads a single data file containing the results of the simulations for one value of inertia
     """
@@ -93,11 +93,23 @@ def load_one_block(filename, var_names, trial_dur = 60, max_num_rows = np.inf, d
     stop = orig_n_samples % n_samples
     X = np.array([np.reshape(x[:,:orig_n_samples-stop], [n_trials, n_samples], order='C') for x in X], dtype=dtype)
 
-    return time.astype(dtype), X, inertia, generator_IDs
+    if not use_fft:
+        return time.astype(dtype), X, inertia, generator_IDs
+
+    from scipy.fft import fft, fftfreq
+    from scipy.signal import butter, filtfilt
+    filter_order = 10
+    cutoff = 0.1
+    b,a = butter(filter_order//2, cutoff, 'hp', fs=1/dt) # filtfilt doubles the filter order
+    X_filtered = filtfilt(b, a, X)
+    Xf = fft(X_filtered)
+    Xf = 2.0 / n_samples * np.abs(Xf[:, :, :n_samples//2])
+    freq = fftfreq(n_samples, dt)[:n_samples//2]
+    return freq.astype(dtype), Xf, inertia, generator_IDs
 
 
-def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure, trial_dur = 60,
-                    max_block_size = np.inf, dtype = np.float32, use_tf = True, add_omega_ref = True):
+def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure, trial_dur=60,
+                    max_block_size=np.inf, dtype=np.float32, use_tf=True, add_omega_ref=True, use_fft=False):
     """
     area_measure - whether Y should contain the inertia of the coi or the total energy of the area
     """
@@ -111,7 +123,8 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
     n_areas = len(generators_areas_map)
     for key in data_files:
         for data_file in data_files[key]:
-            time, x, h, generator_IDs = load_one_block(data_file, var_names, trial_dur, max_block_size, dtype, add_omega_ref)
+            time, x, h, generator_IDs = load_one_block(data_file, var_names, trial_dur,
+                                                       max_block_size, dtype, add_omega_ref, use_fft)
             y = np.zeros(n_areas, dtype=dtype)
             for i,area_generators in enumerate(generators_areas_map):
                 num = 0

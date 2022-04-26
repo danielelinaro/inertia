@@ -95,20 +95,22 @@ if __name__ == '__main__':
 
     data_files = {}
     for key in 'training', 'test', 'validation':
-        all_files = [sorted(glob.glob(data_folder + '/*' + key + '_set.h5')) for data_folder in data_folders]
+        all_files = [sorted(glob.glob(os.path.join(data_folder, '*' + key + '_set.h5'))) for data_folder in data_folders]
         data_files[key] = [item for sublist in all_files for item in sublist]
 
     var_names = config['var_names']
 
+    use_fft = config['use_fft'] if 'use_fft' in config else False
     if entity_name == 'area':
         generators_areas_map = [config['generators_areas_map'][i-1] for i in config['area_IDs_to_learn_inertia']]
-        time, x, y = load_data_areas(data_files,
-                                     var_names,
-                                     generators_areas_map,
-                                     config['generators_Pnom'],
-                                     config['area_measure'],
-                                     trial_dur=config['trial_duration'] if 'trial_duration' in config else 60.,
-                                     max_block_size=config['max_block_size'] if 'max_block_size' in config else np.inf)
+        _, x, y = load_data_areas(data_files,
+                                  var_names,
+                                  generators_areas_map,
+                                  config['generators_Pnom'],
+                                  config['area_measure'],
+                                  trial_dur=config['trial_duration'] if 'trial_duration' in config else 60.,
+                                  max_block_size=config['max_block_size'] if 'max_block_size' in config else np.inf,
+                                  use_fft=use_fft)
     else:
         raise Exception('This part is not implemented yet')
         # call load_data_generators in deep_utils
@@ -118,9 +120,14 @@ if __name__ == '__main__':
     # we always compute mean and std of the training set, whether we'll be using them or not
     x_train_mean = np.mean(x['training'], axis=(1, 2))
     x_train_std = np.std(x['training'], axis=(1, 2))
+    x_train_min = np.min(x['training'], axis=(1, 2))
+    x_train_max = np.max(x['training'], axis=(1, 2))
     if config['normalization'].lower() == 'training_set':
         for key in x:
-            x[key] = tf.constant([(x[key][i].numpy() - m) / s for i,(m,s) in enumerate(zip(x_train_mean, x_train_std))])
+            if use_fft:
+                x[key] = tf.constant([(x[key][i].numpy() - m) / (M - m) for i,(m,M) in enumerate(zip(x_train_min, x_train_max))])
+            else:
+                x[key] = tf.constant([(x[key][i].numpy() - m) / s for i,(m,s) in enumerate(zip(x_train_mean, x_train_std))])
 
     if 'learning_rate_schedule' in config and config['learning_rate_schedule']['name'] is not None:
         lr_schedule = config['learning_rate_schedule'][config['learning_rate_schedule']['name']]
@@ -135,11 +142,13 @@ if __name__ == '__main__':
     parameters['N_samples'] = N_samples
     parameters['x_train_mean'] = x_train_mean
     parameters['x_train_std'] = x_train_std
+    parameters['x_train_min'] = x_train_min
+    parameters['x_train_max'] = x_train_max
     N_epochs = config['N_epochs']
     batch_size = config['batch_size']
     steps_per_epoch = N_training_traces // batch_size
     parameters['steps_per_epoch'] = steps_per_epoch
-    output_path = args.output_dir + '/neural_network/' + experiment_key
+    output_path = os.path.join(args.output_dir, 'neural_network', experiment_key)
     parameters['output_path'] = output_path
     print(f'Number of training traces: {N_training_traces}')
     print(f'Batch size:                {batch_size}')
@@ -219,6 +228,8 @@ if __name__ == '__main__':
             experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs_to_learn_inertia']]))
             experiment.add_tag('buses_' + '_'.join(map(str, bus_numbers)))
             experiment.add_tag('lines_' + '_'.join(map(lambda l: f'{l[0]}-{l[1]}', line_numbers)))
+        if use_fft:
+            experiment.add_tag('fft')
         try:
             experiment.add_tag('streams_arch_{}'.format(config['use_multiple_streams']))
         except:
@@ -267,12 +278,15 @@ if __name__ == '__main__':
                           cb_pars,
                           verbose = 1)
 
-    checkpoint_path = output_path + '/checkpoints'
+    checkpoint_path = os.path.join(output_path, 'checkpoints')
     
     ### find the best model based on the validation loss
-    checkpoint_files = glob.glob(checkpoint_path + '/*.h5')
-    val_loss = [float(file[:-3].split('-')[-1]) for file in checkpoint_files]
-    best_checkpoint = checkpoint_files[np.argmin(val_loss)]
+    checkpoint_files = glob.glob(os.path.join(checkpoint_path, '*.h5'))
+    try:
+        val_loss = [float(file[:-3].split('-')[-1]) for file in checkpoint_files]
+        best_checkpoint = checkpoint_files[np.argmin(val_loss)]
+    except:
+        best_checkpoint = checkpoint_files[-1]
     best_model = models.load_model(best_checkpoint)
 
     ### compute the network prediction on the test set
@@ -293,17 +307,17 @@ if __name__ == '__main__':
     test_results = {'y_test': y_test, 'y_prediction': y_prediction, 'mape_prediction': mape_prediction}
 
     best_model.save(output_path)
-    pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
-    pickle.dump(test_results, open(output_path + '/test_results.pkl', 'wb'))
-    pickle.dump(history.history, open(output_path + '/history.pkl', 'wb'))
+    pickle.dump(parameters, open(os.path.join(output_path, 'parameters.pkl'), 'wb'))
+    pickle.dump(test_results, open(os.path.join(output_path, 'test_results.pkl'), 'wb'))
+    pickle.dump(history.history, open(os.path.join(output_path, 'history.pkl'), 'wb'))
 
     ### plot a graph of the network topology
-    keras.utils.plot_model(model, output_path + '/network_topology.png', show_shapes=True, dpi=300)
+    keras.utils.plot_model(model, os.path.join(output_path, 'network_topology.png'), show_shapes=True, dpi=300)
 
     if log_to_comet:
         experiment.log_metric('mape_prediction', mape_prediction)
-        experiment.log_model('best_model', output_path + '/saved_model.pb')
-        experiment.log_image(output_path + '/network_topology.png', 'network_topology')
+        experiment.log_model('best_model', os.path.join(output_path, 'saved_model.pb'))
+        experiment.log_image(os.path.join(output_path, 'network_topology.png'), 'network_topology')
 
     ### plot a summary figure
     cols = N_entities + 2
@@ -347,5 +361,5 @@ if __name__ == '__main__':
     fig.tight_layout()
     if log_to_comet:
         experiment.log_figure('summary', fig)
-    plt.savefig(output_path + '/summary.pdf')
+    plt.savefig(os.path.join(output_path, 'summary.pdf'))
 
