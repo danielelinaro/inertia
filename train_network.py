@@ -226,8 +226,8 @@ if __name__ == '__main__':
                         line_numbers.append(tmp)
             experiment.add_tag('IEEE39')
             experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs_to_learn_inertia']]))
-            experiment.add_tag('buses_' + '_'.join(map(str, bus_numbers)))
-            experiment.add_tag('lines_' + '_'.join(map(lambda l: f'{l[0]}-{l[1]}', line_numbers)))
+            if len(bus_numbers) > 0: experiment.add_tag('buses_' + '_'.join(map(str, bus_numbers)))
+            if len(line_numbers) > 0: experiment.add_tag('lines_' + '_'.join(map(lambda l: f'{l[0]}-{l[1]}', line_numbers)))
         if use_fft:
             experiment.add_tag('fft')
         try:
