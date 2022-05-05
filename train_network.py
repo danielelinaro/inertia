@@ -103,7 +103,7 @@ if __name__ == '__main__':
     use_fft = config['use_fft'] if 'use_fft' in config else False
     if entity_name == 'area':
         generators_areas_map = [config['generators_areas_map'][i-1] for i in config['area_IDs_to_learn_inertia']]
-        _, x, y = load_data_areas(data_files,
+        t, x, y = load_data_areas(data_files,
                                   var_names,
                                   generators_areas_map,
                                   config['generators_Pnom'],
@@ -111,6 +111,12 @@ if __name__ == '__main__':
                                   trial_dur=config['trial_duration'] if 'trial_duration' in config else 60.,
                                   max_block_size=config['max_block_size'] if 'max_block_size' in config else np.inf,
                                   use_fft=use_fft)
+        if use_fft:
+            freq = t
+            sampling_rate = None
+        else:
+            sampling_rate = 1 / np.diff(t[:2])[0]
+            print(f'Sampling rate: {sampling_rate:g} Hz.')
     else:
         raise Exception('This part is not implemented yet')
         # call load_data_generators in deep_utils
@@ -167,7 +173,8 @@ if __name__ == '__main__':
                                          config['normalization'],
                                          config['loss_function'],
                                          optimizer_pars,
-                                         lr_schedule)
+                                         lr_schedule,
+                                         sampling_rate)
 
     if config['normalization'].lower() == 'layer':
         for i,layer in enumerate(model.layers):
@@ -198,6 +205,17 @@ if __name__ == '__main__':
             cb_pars[-1]['name'] = name
     except:
         cb_pars = None
+
+    if 'pooling_type' not in config['model_arch'] or config['model_arch']['pooling_type'] is None:
+        pooling_type = 'no'
+    elif config['model_arch']['pooling_type'].lower() == 'max':
+        pooling_type = 'max'
+    elif config['model_arch']['pooling_type'].lower() in ('avg','average'):
+        pooling_type = 'average'
+    elif config['model_arch']['pooling_type'].lower() == 'spectral':
+        pooling_type = 'spectral'
+    elif config['model_arch']['pooling_type'].lower() in ('down', 'downsample', 'downsampling'):
+        pooling_type = 'downsample'
 
     if log_to_comet:
         # add a bunch of tags to the experiment
@@ -253,14 +271,20 @@ if __name__ == '__main__':
             experiment.add_tag(config['learning_rate_schedule']['name'].split('_')[0] + '_lr')
         except:
             pass
-        if config['model_arch']['preproc_activation'] is None:
-            experiment.add_tag('ReLU_none')
-        else:
-            activation_fun = config['model_arch']['preproc_activation']
-            if activation_fun.lower() == 'relu':
-                # make sure the spelling is correct
-                activation_fun = 'ReLU'
-            experiment.add_tag(activation_fun + '_' + config['model_arch']['activation_loc'])
+        try:
+            if config['model_arch']['preproc_activation'] is None:
+                experiment.add_tag('ReLU_none')
+            else:
+                activation_fun = config['model_arch']['preproc_activation']
+                if activation_fun.lower() == 'relu':
+                    # make sure the spelling is correct
+                    activation_fun = 'ReLU'
+                experiment.add_tag(activation_fun + '_' + config['model_arch']['activation_loc'])
+        except:
+            experiment.add_tag('FCNN')
+
+        experiment.add_tag(pooling_type + '_pooling')
+
         try:
             for tag in config['comet_experiment_tags']:
                 experiment.add_tag(tag)
@@ -287,7 +311,18 @@ if __name__ == '__main__':
         best_checkpoint = checkpoint_files[np.argmin(val_loss)]
     except:
         best_checkpoint = checkpoint_files[-1]
-    best_model = models.load_model(best_checkpoint)
+
+    try:
+        best_model = models.load_model(best_checkpoint)
+    except:
+        if pooling_type == 'spectral':
+            from dlml.nn import SpectralPooling
+            custom_objects = {'SpectralPooling': SpectralPooling}
+        elif pooling_type == 'downsample':
+            from dlml.nn import DownSampling1D
+            custom_objects = {'DownSampling1D': DownSampling1D}
+        with keras.utils.custom_object_scope(custom_objects):
+            best_model = models.load_model(best_checkpoint)
 
     ### compute the network prediction on the test set
     if len(model.inputs) == 1:

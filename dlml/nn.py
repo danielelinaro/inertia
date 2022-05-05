@@ -12,9 +12,83 @@ from .utils import print_msg, print_warning
 
 __all__ = ['LEARNING_RATE', 'LearningRateCallback', 'make_preprocessing_pipeline_1D',
            'make_preprocessing_pipeline_2D', 'build_model', 'train_model', 'predict',
-           'sigint_handler']
+           'sigint_handler', 'SpectralPooling', 'DownSampling1D']
 
 LEARNING_RATE = []
+
+
+class SpectralPooling(keras.layers.Layer):
+    def __init__(self, sampling_rate, cutoff_frequency, **kwargs):
+        super(SpectralPooling, self).__init__(**kwargs)
+        self.sampling_rate = sampling_rate
+        self.cutoff_frequency = cutoff_frequency
+
+    @property
+    def dt(self):
+        return self.__dt
+
+    @property
+    def sampling_rate(self):
+        return self.__sampling_rate
+    @sampling_rate.setter
+    def sampling_rate(self, sampling_rate):
+        if sampling_rate < 0:
+            raise ValueError('Sampling rate must be >= 0')
+        self.__sampling_rate = sampling_rate
+        self.__dt = 1 / sampling_rate
+
+    @property
+    def cutoff_frequency(self):
+        return self.__cutoff_frequency
+    @cutoff_frequency.setter
+    def cutoff_frequency(self, cutoff_frequency):
+        if cutoff_frequency < 0:
+            raise ValueError('Cut-off frequency must be >= 0')
+        self.__cutoff_frequency = cutoff_frequency
+
+    def build(self, input_shape):
+        n_steps = input_shape[1] // 2 + 1
+        freq = tf.linspace(0., self.sampling_rate / 2., n_steps)
+        idx = tf.squeeze(tf.where(freq <= self.cutoff_frequency))
+        self.idx = slice(0, idx[-1])
+        self.coeff = self.cutoff_frequency / self.sampling_rate * 2
+
+    def call(self, inputs):
+        perm = 0, 2, 1
+        # tf.signal.rfft works on the inner most dimension, i.e., the last one
+        x = tf.transpose(inputs, perm)
+        xf = tf.signal.rfft(x)
+        xf_trunc = xf[:, :, self.idx]
+        x_sub = tf.transpose(tf.signal.irfft(xf_trunc) * self.coeff, perm)
+        return x_sub
+
+    def get_config(self):
+        return {'sampling_rate': self.sampling_rate, 'cutoff_frequency': self.cutoff_frequency}
+
+
+class DownSampling1D(keras.layers.Layer):
+    def __init__(self, steps=2, **kwargs):
+        super(DownSampling1D, self).__init__(**kwargs)
+        self.steps = steps
+
+    @property
+    def steps(self):
+        return self.__steps
+    @steps.setter
+    def steps(self, steps):
+        if steps <= 0:
+            raise ValueError('Downsampling steps must be > 0')
+        self.__steps = steps
+
+    def build(self, input_shape):
+        self.idx = slice(0, input_shape[1], self.steps)
+
+    def call(self, inputs):
+        return inputs[:, self.idx, :]
+
+    def get_config(self):
+        return {'steps': self.steps}
+
 
 TERMINATE_TF = False
 def sigint_handler(sig, frame):
@@ -59,10 +133,10 @@ class LearningRateCallback(keras.callbacks.Callback):
             self.experiment.log_metric('learning_rate', lr, self.step)
 
 
-def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation_fun, activation_loc, count=None):
+def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation_fun, activation_loc, sampling_rate, pooling_type, count=None):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
-            raise Exception(f'Unknown activation function {activation_fun}')
+            raise Exception(f'Unknown activation function "{activation_fun}"')
         if activation_loc is None:
             raise Exception(f'Must specify activation function location')
         elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
@@ -72,19 +146,35 @@ def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation
         conv_lyr_name = base_name + (f'_conv_{count}_{n+1}' if count is not None else f'_conv_{n+1}')
         activ_lyr_name = base_name + (f'_relu-{count}_{n+1}' if count is not None else f'_relu_{n+1}')
         pool_lyr_name = base_name + (f'_pool_{count}_{n+1}' if count is not None else f'_pool_{n+1}')
+        if pooling_type is None:
+            pooling_layer = None
+        elif pooling_type.lower() == 'max':
+            pooling_layer = layers.MaxPooling1D(N_pooling,  name=pool_lyr_name)
+        elif pooling_type.lower() in ('avg','average'):
+            pooling_layer = layers.AveragePooling1D(N_pooling,  name=pool_lyr_name)
+        elif pooling_type.lower() in ('down', 'downsampling', 'downsample'):
+            pooling_layer = DownSampling1D(N_pooling, name=pool_lyr_name)
+        elif pooling_type.lower() == 'spectral':
+            layer_sampling_rate = sampling_rate / (2 ** n)
+            cutoff_frequency = layer_sampling_rate / (2 ** N_pooling)
+            pooling_layer = SpectralPooling(layer_sampling_rate, cutoff_frequency, name=pool_lyr_name)
+        else:
+            raise Exception(f'Unknown pooling type "{pooling_type}"')
         try:
-            L = layers.Conv1D(N_conv, sz, activation=None, name=conv_lyr_name)(L)
+            L = layers.Conv1D(filters=N_conv, kernel_size=sz, strides=1, activation=None, name=conv_lyr_name)(L)
         except:
-            L = layers.Conv1D(N_conv, sz, activation=None, name=conv_lyr_name)(input_layer)
+            L = layers.Conv1D(filters=N_conv, kernel_size=sz, strides=1, activation=None, name=conv_lyr_name)(input_layer)
         if activation_fun is not None:
             if activation_loc == 'after_conv':
                 L = layers.ReLU(name=activ_lyr_name)(L)
-                L = layers.MaxPooling1D(N_pooling,  name=pool_lyr_name)(L)
+                if pooling_layer is not None:
+                    L = pooling_layer(L)
             else:
-                L = layers.MaxPooling1D(N_pooling, name=pool_lyr_name)(L)
+                if pooling_layer is not None:
+                    L = pooling_layer(L)
                 L = layers.ReLU(name=activ_lyr_name)(L)
-        else:
-            L = layers.MaxPooling1D(N_pooling, name=pool_lyr_name)(L)
+        elif pooling_layer is not None:
+            L = pooling_layer(L)
     return L
 
 
@@ -118,7 +208,7 @@ def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, activation
 
 
 def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, streams_mode, \
-                normalization_strategy, loss_fun_pars, optimizer_pars, lr_schedule_pars):
+                normalization_strategy, loss_fun_pars, optimizer_pars, lr_schedule_pars, sampling_rate):
     """
     Builds and compiles the model
     
@@ -192,9 +282,14 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
         raise Exception('Unknown optimizer: {}.'.format(optimizer_name))
 
     N_units = model_arch['N_units']
-    kernel_size = model_arch['kernel_size']
-    activation_fun = model_arch['preproc_activation']
-    activation_loc = model_arch['activation_loc']
+    try:
+        kernel_size = model_arch['kernel_size']
+        activation_fun = model_arch['preproc_activation']
+        activation_loc = model_arch['activation_loc']
+        CNN = True
+    except:
+        # will build a simple fully-connected neural network
+        CNN = False
 
     ### figure out how data should be normalized
     if normalization_strategy not in ('batch', 'layer', 'training_set'):
@@ -203,12 +298,13 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
     batch_norm = normalization_strategy.lower() == 'batch'
     normalization_layer = normalization_strategy.lower() == 'layer'
 
-    def make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, count):
+    def make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, sampling_rate, pooling_type, count):
         if N_dims == 1:
             L = []
             for input_layer in input_layers:
-                lyr = make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, \
-                                                     activation_fun, activation_loc, count)
+                lyr = make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size,
+                                                     activation_fun, activation_loc,
+                                                     sampling_rate, pooling_type, count)
                 L.append(lyr)
         else:
             L = make_preprocessing_pipeline_2D(input_layers[0], N_units, kernel_size, \
@@ -223,8 +319,8 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
         output = layers.Dense(N_outputs, name=f'predictions_{count}')(L)
         return output
 
-    def make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, N_outputs, model_arch, count):
-        L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, count)
+    def make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, N_outputs, model_arch, sampling_rate, pooling_type, count):
+        L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, sampling_rate, pooling_type, count)
         if isinstance(L, list):
             if len(L) == 1:
                 L = L[0]
@@ -233,10 +329,13 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
         L = layers.Flatten(name=f'flatten_{count}')(L)
         return make_dense_stream(L, N_units, N_outputs, model_arch, count)
 
-    if type(streams_mode) not in (int, float):
-        raise Exception('streams_mode must be an integer in the range [0,3]')
-    if streams_mode not in (0, 1, 2, 3):
-        raise ValueError('streams_mode must be in the range [0,3]')
+    if CNN:
+        if type(streams_mode) not in (int, float):
+            raise Exception('streams_mode must be an integer in the range [0,3]')
+        if streams_mode not in (0, 1, 2, 3):
+            raise ValueError('streams_mode must be in the range [0,3]')
+
+    pooling_type = model_arch['pooling_type']
 
     if N_dims == 1:
         inputs = []
@@ -259,42 +358,48 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
             input_layer = inputs
         input_layers = [input_layer]
 
-    if streams_mode == 0:
-        # just one stream
-        outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
-                                    activation_loc, N_outputs, model_arch, 1)]
-    elif streams_mode == 1:
-        # common preprocessing stream and then one stream of dense layers for each output
-        L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, 1)
-        if isinstance(L, list):
-            if len(L) == 1:
-                L = L[0]
-            else:
-                L = layers.concatenate(L, name='concat_1')
-        L = layers.Flatten(name='flatten_1')(L)
-        outputs = [make_dense_stream(L, N_units, 1, model_arch, i+1) for i in range(N_outputs)]
+    if CNN:
+        if streams_mode == 0:
+            # just one stream
+            outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
+                                        activation_loc, N_outputs, model_arch, sampling_rate, pooling_type, 1)]
+        elif streams_mode == 1:
+            # common preprocessing stream and then one stream of dense layers for each output
+            L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, sampling_rate, pooling_type, 1)
+            if isinstance(L, list):
+                if len(L) == 1:
+                    L = L[0]
+                else:
+                    L = layers.concatenate(L, name='concat_1')
+            L = layers.Flatten(name='flatten_1')(L)
+            outputs = [make_dense_stream(L, N_units, 1, model_arch, i+1) for i in range(N_outputs)]
 
-    elif streams_mode == 2:
-        # one preprocessing stream for each output and then one common stream of dense layers
-        L = [make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
-                                       activation_loc, i+1) for i in range(N_outputs)]
-        if isinstance(L[0], list):
-            if len(L[0]) == 1:
-                L = L[0][0]
+        elif streams_mode == 2:
+            # one preprocessing stream for each output and then one common stream of dense layers
+            L = [make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
+                                           activation_loc, sampling_rate, pooling_type, i+1) for i in range(N_outputs)]
+            if isinstance(L[0], list):
+                if len(L[0]) == 1:
+                    L = L[0][0]
+                else:
+                    L = layers.concatenate([l for LL in L for l in LL], name='concat_1')
             else:
-                L = layers.concatenate([l for LL in L for l in LL], name='concat_1')
-        else:
-            if len(L) == 1:
-                L = L[0]
-            else:
-                L = layers.concatenate(L, name='concat_1')
-        L = layers.Flatten(name='flatten_1')(L)
-        outputs = make_dense_stream(L, N_units, N_outputs, model_arch, 1)
+                if len(L) == 1:
+                    L = L[0]
+                else:
+                    L = layers.concatenate(L, name='concat_1')
+            L = layers.Flatten(name='flatten_1')(L)
+            outputs = make_dense_stream(L, N_units, N_outputs, model_arch, 1)
 
-    elif streams_mode == 3:
-        # one full stream for each output
-        outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
-                                    activation_loc, 1, model_arch, i+1) for i in range(N_outputs)]
+        elif streams_mode == 3:
+            # one full stream for each output
+            outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
+                                        activation_loc, 1, model_arch, sampling_rate, pooling_type, i+1) for i in range(N_outputs)]
+
+    else:
+        L = layers.concatenate(input_layers, name='concat_inputs')
+        L = layers.Flatten(name='flatten_inputs')(L)
+        outputs = [make_dense_stream(L, N_units, N_outputs, model_arch, 1)]
 
     model = keras.Model(inputs=inputs, outputs=outputs)
     model.compile(optimizer=optimizer, loss=loss)
