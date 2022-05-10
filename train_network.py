@@ -210,6 +210,8 @@ if __name__ == '__main__':
         pooling_type = 'no'
     elif config['model_arch']['pooling_type'].lower() == 'max':
         pooling_type = 'max'
+    elif config['model_arch']['pooling_type'].lower() == 'argmax':
+        pooling_type = 'argmax'
     elif config['model_arch']['pooling_type'].lower() in ('avg','average'):
         pooling_type = 'average'
     elif config['model_arch']['pooling_type'].lower() == 'spectral':
@@ -321,6 +323,9 @@ if __name__ == '__main__':
         elif pooling_type == 'downsample':
             from dlml.nn import DownSampling1D
             custom_objects = {'DownSampling1D': DownSampling1D}
+        elif pooling_type == 'argmax':
+            from dlml.nn import MaxPooling1DWithArgmax
+            custom_objects = {'MaxPooling1DWithArgmax': MaxPooling1DWithArgmax}
         with keras.utils.custom_object_scope(custom_objects):
             best_model = models.load_model(best_checkpoint)
 

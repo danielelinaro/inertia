@@ -12,7 +12,7 @@ from .utils import print_msg, print_warning
 
 __all__ = ['LEARNING_RATE', 'LearningRateCallback', 'make_preprocessing_pipeline_1D',
            'make_preprocessing_pipeline_2D', 'build_model', 'train_model', 'predict',
-           'sigint_handler', 'SpectralPooling', 'DownSampling1D']
+           'sigint_handler', 'SpectralPooling', 'DownSampling1D', 'MaxPooling1DWithArgmax']
 
 LEARNING_RATE = []
 
@@ -90,6 +90,36 @@ class DownSampling1D(keras.layers.Layer):
         return {'steps': self.steps}
 
 
+class MaxPooling1DWithArgmax(keras.layers.MaxPooling1D):
+    def __init__(self, pool_size=2, strides=None,
+                 padding='valid', data_format='channels_last',
+                 store_argmax=False, **kwargs):
+
+        super(MaxPooling1DWithArgmax, self).__init__(
+            pool_size=pool_size,
+            strides=strides,
+            padding=padding,
+            data_format=data_format,
+            **kwargs
+        )
+        self.store_argmax = store_argmax
+        self.padding_upper = padding.upper()
+
+    def call(self, inputs):
+        if self.store_argmax:
+            ret = tf.nn.max_pool_with_argmax(tf.expand_dims(inputs, 1),
+                                             ksize=(1, self.pool_size[0]),
+                                             strides=(1, self.strides[0]),
+                                             padding=self.padding_upper)
+            self.argmax = ret.argmax
+        return super(MaxPooling1DWithArgmax, self).call(inputs)
+
+    def get_config(self):
+        return {'pool_size': self.pool_size[0], 'strides': self.strides[0],
+                'padding': self.padding, 'data_format': self.data_format,
+                'store_argmax': self.store_argmax}
+
+
 TERMINATE_TF = False
 def sigint_handler(sig, frame):
     global TERMINATE_TF
@@ -150,6 +180,8 @@ def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation
             pooling_layer = None
         elif pooling_type.lower() == 'max':
             pooling_layer = layers.MaxPooling1D(N_pooling,  name=pool_lyr_name)
+        elif pooling_type.lower() == 'argmax':
+            pooling_layer = MaxPooling1DWithArgmax(N_pooling,  name=pool_lyr_name)
         elif pooling_type.lower() in ('avg','average'):
             pooling_layer = layers.AveragePooling1D(N_pooling,  name=pool_lyr_name)
         elif pooling_type.lower() in ('down', 'downsampling', 'downsample'):
