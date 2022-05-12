@@ -42,6 +42,7 @@ def collect_experiments(area_IDs, network_name = 'IEEE39',
                         stoch_load_bus_IDs = [3],
                         rec_bus_IDs = [],
                         additional_tags = [],
+                        missing_tags = [],
                         verbose = False):
     """
     D - damping
@@ -91,7 +92,20 @@ def collect_experiments(area_IDs, network_name = 'IEEE39',
 
     if verbose:
         print('Query:', query)
-    experiments = api.query(workspace, project_name, query, archived=False)
+    expts = api.query(workspace, project_name, query, archived=False)
+    # the next bit of code keeps only those experiments that do not have tags
+    # appearing in the missing_tags list: this is necessary because I can't figure
+    # out how to negate a tag directly in a Comet query
+    experiments = []
+    for expt in expts:
+        expt_tags = expt.get_tags()
+        keep = True
+        for tag in missing_tags:
+            if tag in expt_tags:
+                keep = False
+                break
+        if keep:
+            experiments.append(expt)
     n_experiments = len(experiments)
     if n_experiments == 0:
         return None
