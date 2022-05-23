@@ -102,8 +102,11 @@ def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype
     filter_order = kwargs['filter_order'] if 'filter_order' in kwargs else 10
     Wn = kwargs['Wn'] if 'Wn' in kwargs else 0.1
     btype = kwargs['btype'] if 'btype' in kwargs else 'hp'
-    b,a = butter(filter_order//2, Wn, btype, fs=1/dt) # filtfilt doubles the filter order
-    X_filtered = filtfilt(b, a, X)
+    if Wn != 0:
+        b,a = butter(filter_order//2, Wn, btype, fs=1/dt) # filtfilt doubles the filter order
+        X_filtered = filtfilt(b, a, X)
+    else:
+        X_filtered = X
     Xf = fft(X_filtered)
     Xf = 2.0 / n_samples * np.abs(Xf[:, :, :n_samples//2])
     freq = fftfreq(n_samples, dt)[:n_samples//2]

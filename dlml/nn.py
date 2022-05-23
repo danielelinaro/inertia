@@ -12,7 +12,8 @@ from .utils import print_msg, print_warning
 
 __all__ = ['LEARNING_RATE', 'LearningRateCallback', 'make_preprocessing_pipeline_1D',
            'make_preprocessing_pipeline_2D', 'build_model', 'train_model', 'predict',
-           'sigint_handler', 'SpectralPooling', 'DownSampling1D', 'MaxPooling1DWithArgmax']
+           'sigint_handler', 'SpectralPooling', 'DownSampling1D', 'MaxPooling1DWithArgmax',
+           'compute_receptive_field']
 
 LEARNING_RATE = []
 
@@ -523,5 +524,93 @@ def predict(model, data_sliding, window_step, rolling_length=50):
     time = np.arange(n_samples) * window_step
     return time, H, y
 
+
+def compute_receptive_field(model, stop_layer=''):
+    '''
+    Computes the effective receptive field size and the effective stride of a convolutional neural network.
+
+    Parameters:
+    model - the CNN: it must be an instance of either keras.Model or keras.Sequential.
+    stop_layer - the layer at which the computation of effective receptive field and stride should be stopped.
+    It can be the layer itself, a string containing the name of the layer or a class. In the latter case,
+    the computation will stop at the first instance of the given class. Pass an empty string to compute RF size
+    and stride of the whole model.
+
+    Returns:
+    effective_RF_size - the effective receptive field size: a dictionary containing as keys the layer names
+    and as values the corresponding RF size on the input
+    effective_stride - the effective stride: a dictionary containing as keys the layer names and as values
+    the corresponding stride on the input
+    '''
+
+    if not isinstance(model, keras.Model) and not isinstance(model, keras.Sequential):
+        raise ValueError('Argument `model` must be an instance of either keras.Model or keras.Sequential')
+
+    import inspect
+    if isinstance(stop_layer, str):
+        stop_layer_name = stop_layer
+    elif isinstance(stop_layer, keras.layers.Layer):
+        stop_layer_name = stop_layer.name
+    elif inspect.isclass(stop_layer):
+        stop_layer_name = None
+    else:
+        raise ValueError('Argument `stop_layer` should be a layer name, a layer instance or a layer class')
+
+    def stop_here(layer):
+        return (stop_layer_name is not None and layer.name == stop_layer_name) or \
+            (stop_layer_name is None and isinstance(layer, stop_layer))
+
+    ### compute the effective receptive field size
+    effective_RF_size = {}
+    R_prev = 1
+    for k,layer in enumerate(model.layers):
+        if stop_here(layer):
+            break
+        if hasattr(layer, 'kernel_size'):
+            # a convolutional layer
+            if len(layer.kernel_size) > 1:
+                raise Exception('This function only works with 1D convolutional layers')
+            fk = layer.kernel_size[0]
+        elif hasattr(layer, 'pool_size'):
+            # a pooling layer
+            if len(layer.pool_size) > 1:
+                raise Exception('This function only works with 1D pooling layers')
+            fk = layer.pool_size[0]
+        else:
+            fk = None
+        if fk is not None:
+            strides = []
+            for i in range(1, k):
+                try:
+                    strides.append(model.layers[i].strides[0])
+                except:
+                    pass
+            effective_RF_size[layer.name] = R_prev + (fk - 1) * np.prod(strides, dtype=np.int32)
+        else:
+            effective_RF_size[layer.name] = R_prev
+        R_prev = effective_RF_size[layer.name]
+    
+    ### compute the effective stride
+    layers_with_strides = [layer.name for layer in model.layers if hasattr(layer, 'strides')]
+    layer_strides = [layer.strides[0] for layer in model.layers if hasattr(layer, 'strides')]
+    effective_stride = {}
+    for i,layer in enumerate(model.layers):
+        if stop_here(layer):
+            break
+        if layer.name in layers_with_strides:
+            idx = layers_with_strides.index(layer.name)
+            effective_stride[layer.name] = np.prod(layer_strides[:idx+1])
+        elif i > 0:
+            # a layer with no intrinsic stride has the same stride of the
+            # last previous layer that has a stride
+            for prev_layer in model.layers[i-1::-1]:
+                if prev_layer.name in effective_stride:
+                    effective_stride[layer.name] = effective_stride[prev_layer.name]
+                    break
+        else:
+            # the first layer
+            effective_stride[layer.name] = 1
+        
+    return effective_RF_size, effective_stride
 
 
