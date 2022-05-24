@@ -13,7 +13,7 @@ from .utils import print_msg, print_warning
 __all__ = ['LEARNING_RATE', 'LearningRateCallback', 'make_preprocessing_pipeline_1D',
            'make_preprocessing_pipeline_2D', 'build_model', 'train_model', 'predict',
            'sigint_handler', 'SpectralPooling', 'DownSampling1D', 'MaxPooling1DWithArgmax',
-           'compute_receptive_field']
+           'compute_receptive_field', 'compute_correlations']
 
 LEARNING_RATE = []
 
@@ -613,4 +613,62 @@ def compute_receptive_field(model, stop_layer=''):
         
     return effective_RF_size, effective_stride
 
+
+def compute_correlations(model, X, dt, bands, effective_RF_size, effective_stride, filter_order=6, verbose=True):
+
+    import sys
+    def my_print(msg, fd=sys.stdout):
+        fd.write(msg)
+        fd.flush()
+
+    from scipy.signal import butter, filtfilt, hilbert
+    from scipy.stats import pearsonr
+    from tqdm import tqdm
+
+    ## Filter the input in a series of bands and compute the signal envelope
+    N_trials, N_samples = X.shape
+    N_bands = len(bands)
+    # filter the input in various frequency bands
+    X_filt = np.zeros((N_bands, N_trials, N_samples))
+    if verbose: my_print(f'Filtering the input in {N_bands} frequency bands... ')
+    for i in range(N_bands):
+        b,a = butter(filter_order//2, bands[i], 'bandpass', fs=1/dt)
+        X_filt[i,:,:] = filtfilt(b, a, X)
+    if verbose: print('done.')
+    # compute the envelope of the filtered signal
+    if verbose: my_print(f'Computing the envelope of the filtered signals... ')
+    X_filt_envel = np.abs(hilbert(X_filt))
+    if verbose: print('done.')
+
+    ## Compute the outputs of the last layer before the fully connected layer
+    layer_name = model.layers[-1].name
+    if verbose: my_print(f'Computing the output of layer {layer_name}... ')
+    multi_Y = model(X)
+    if verbose: print('done.')
+    Y = multi_Y[-1].numpy()
+    _, N_neurons, N_filters = Y.shape
+    if verbose: print(f'Layer "{layer_name}" has {N_filters} filters, each with {N_neurons} neurons.')
+
+    ## Compute the mean squared envelope for each receptive field
+    RF_sz, RF_str = effective_RF_size[layer_name], effective_stride[layer_name]
+    if verbose: print(f'The effective RF size and stride of layer "{layer_name}" are {RF_sz} and {RF_str} respectively.')
+    mean_squared_envel = np.zeros((N_trials, N_bands, N_neurons))
+    if verbose: my_print('Computing the mean squared envelope for each receptive field... ')
+    for i in range(N_neurons):
+        start, stop = i * RF_str, i * RF_str + RF_sz
+        X_filt_envel_sub = X_filt_envel[:, :, start:stop]
+        mean_squared_envel[:,:,i] = np.mean(X_filt_envel_sub ** 2, axis=2).T
+    if verbose: print('done.')
+
+    ## For each frequency band, compute the correlation between mean squared envelope
+    ## of the input (to each receptive field) and the output of each neuron in the layer
+    R = np.zeros((N_trials, N_bands, N_filters))
+    p = np.zeros((N_trials, N_bands, N_filters))
+    if verbose: print('Computing the correlations tensor...')
+    for i in tqdm(range(N_trials)):
+        for j in range(N_bands):
+            for k in range(N_filters):
+                R[i,j,k], p[i,j,k] = pearsonr(Y[i,:,k], mean_squared_envel[i,j,:])
+
+    return R, p
 
