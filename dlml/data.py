@@ -94,19 +94,30 @@ def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype
     stop = orig_n_samples % n_samples
     X = np.array([np.reshape(x[:,:orig_n_samples-stop], [n_trials, n_samples], order='C') for x in X], dtype=dtype)
 
-    if not use_fft:
-        return time.astype(dtype), X, inertia, generator_IDs
-
     from scipy.fft import fft, fftfreq
     from scipy.signal import butter, filtfilt
-    filter_order = kwargs['filter_order'] if 'filter_order' in kwargs else 10
-    Wn = kwargs['Wn'] if 'Wn' in kwargs else 0.1
-    btype = kwargs['btype'] if 'btype' in kwargs else 'hp'
-    if Wn != 0:
+
+    if 'Wn' in kwargs:
+        Wn = kwargs['Wn']
+        filter_order = kwargs['filter_order'] if 'filter_order' in kwargs else 10
+        if 'btype' in kwargs:
+            btype = kwargs['btype']
+            if np.isscalar(Wn) and btype not in ('lp','hp'):
+                raise Exception('btype should be either "lp" or "hp"')
+            elif not np.isscalar(Wn):
+                btype = 'bp'
+        elif np.isscalar(Wn):
+            btype = 'hp'
+        else:
+            btype = 'bp'
         b,a = butter(filter_order//2, Wn, btype, fs=1/dt) # filtfilt doubles the filter order
         X_filtered = filtfilt(b, a, X)
     else:
         X_filtered = X
+
+    if not use_fft:
+        return time.astype(dtype), X_filtered, inertia, generator_IDs
+
     Xf = fft(X_filtered)
     Xf = 2.0 / n_samples * np.abs(Xf[:, :, :n_samples//2])
     freq = fftfreq(n_samples, dt)[:n_samples//2]
