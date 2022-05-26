@@ -614,7 +614,7 @@ def compute_receptive_field(model, stop_layer=''):
     return effective_RF_size, effective_stride
 
 
-def compute_correlations(model, X, dt, bands, effective_RF_size, effective_stride, filter_order=6, verbose=True):
+def compute_correlations(model, X, fs, bands, effective_RF_size, effective_stride, filter_order=6, verbose=True):
 
     import sys
     def my_print(msg, fd=sys.stdout):
@@ -632,7 +632,7 @@ def compute_correlations(model, X, dt, bands, effective_RF_size, effective_strid
     X_filt = np.zeros((N_bands, N_trials, N_samples))
     if verbose: my_print(f'Filtering the input in {N_bands} frequency bands... ')
     for i in range(N_bands):
-        b,a = butter(filter_order//2, bands[i], 'bandpass', fs=1/dt)
+        b,a = butter(filter_order//2, bands[i], 'bandpass', fs=fs)
         X_filt[i,:,:] = filtfilt(b, a, X)
     if verbose: print('done.')
     # compute the envelope of the filtered signal

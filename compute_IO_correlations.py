@@ -145,6 +145,7 @@ if __name__ == '__main__':
     force = False
     N_bands = 20
     filter_order = 8
+    spacing = 'log'
 
     while i < n_args:
         arg = sys.argv[i]
@@ -157,6 +158,14 @@ if __name__ == '__main__':
             make_plots = True
         elif arg in ('-N', '--nbands'):
             N_bands = int(sys.argv[i+1])
+            i += 1
+        elif arg == '--spacing':
+            if sys.argv[i+1].lower() in ('lin', 'linear'):
+                spacing = 'lin'
+            elif sys.argv[i+1].lower() in ('log', 'logarithmic'):
+                spacing = 'log'
+            else:
+                raise Exception(f'Unknown value for --spacing: "{sys.argv[i+1]}"')
             i += 1
         elif arg == '--order':
             filter_order = int(sys.argv[i+1])
@@ -311,7 +320,11 @@ if __name__ == '__main__':
     ### Correlations in the actual model
     # define some variables used here and for the control model below:
     dt = np.diff(t[:2])[0]
-    edges = np.logspace(np.log10(0.05), np.log10(0.5 / dt), N_bands+1)
+    fs = np.round(1/dt)
+    if spacing == 'lin':
+        edges = np.linspace(0.05, 0.5/dt, N_bands+1)
+    else:
+        edges = np.logspace(np.log10(0.05), np.log10(0.5/dt), N_bands+1)
     edges_ctrl = edges
     bands = [[a,b] for a,b in zip(edges[:-1], edges[1:])]
     N_bands = len(bands)
@@ -329,10 +342,10 @@ if __name__ == '__main__':
 
     if not os.path.isfile(output_file + '.npz') or force:
         # compute the correlations:
-        R,p = compute_correlations(multi_output_model, X[0], dt, bands, effective_RF_size,
+        R,p = compute_correlations(multi_output_model, X[0], fs, bands, effective_RF_size,
                                    effective_stride, filter_order)
         # compute the correlations for the control model:
-        R_ctrl,p_ctrl = compute_correlations(ctrl_model, X[0], dt, bands, effective_RF_size,
+        R_ctrl,p_ctrl = compute_correlations(ctrl_model, X[0], fs, bands, effective_RF_size,
                                              effective_stride, filter_order)
         # save everyting
         np.savez_compressed(output_file + '.npz', R=R, p=p, R_ctrl=R_ctrl, p_ctrl=p_ctrl,
