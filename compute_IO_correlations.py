@@ -19,14 +19,15 @@ prog_name = os.path.basename(sys.argv[0])
 
 def usage():
     print(f'usage: {prog_name} [<options>] <experiment_ID>')
-    print( '')
-    print('     -N, --nbands   number of frequency bands in which the range (0.05,Fn)')
+    print('')
+    print('    -N, --nbands   number of frequency bands in which the range (0.05,Fn)')
     print('                    will be subdivided (default 20, with Fn the Nyquist frequency)')
-    print( '    -o, --output   output file name')
-    print( '    -f, --force    force overwrite of existing data file')
-    print( '    --plots        generate plots')
-    print( '    -h, --help     print this help message and exit')
-    print( '')
+    print('    --stop-layer   name of the layer used for the computation of correlations')
+    print('    -o, --output   output file name')
+    print('    -f, --force    force overwrite of existing data file')
+    print('    --plots        generate plots')
+    print('    -h, --help     print this help message and exit')
+    print('')
     print(f'Run with {prog_name} 034a1edb0797475b985f0e1335dab383')
 
 
@@ -146,6 +147,7 @@ if __name__ == '__main__':
     N_bands = 20
     filter_order = 8
     spacing = 'log'
+    stop_layer = None
 
     while i < n_args:
         arg = sys.argv[i]
@@ -170,6 +172,9 @@ if __name__ == '__main__':
         elif arg == '--order':
             filter_order = int(sys.argv[i+1])
             i += 1
+        elif arg == '--stop-layer':
+            stop_layer = sys.argv[i+1]
+            i += 1
         else:
             break
         i += 1
@@ -181,6 +186,9 @@ if __name__ == '__main__':
     if output_file is not None and os.path.isfile(output_file) and not force and not make_plots:
         print(f'{output_file} exists: use -f to overwrite')
         sys.exit(2)
+
+    if output_file is not None:
+        output_file = os.path.splitext(output_file)[0]
 
     ### Make sure that we have the model requested by the user
     experiment_ID = sys.argv[i]
@@ -251,7 +259,12 @@ if __name__ == '__main__':
     model.summary()
 
     ### Compute effective receptive field size and stride
-    effective_RF_size,effective_stride = compute_receptive_field(model, stop_layer=keras.layers.Flatten)
+    if stop_layer is None:
+        effective_RF_size,effective_stride = compute_receptive_field(model, stop_layer=keras.layers.Flatten,
+                                                                     include_stop_layer=False)
+    else:
+        effective_RF_size,effective_stride = compute_receptive_field(model, stop_layer=stop_layer,
+                                                                     include_stop_layer=True)
     print('Effective receptive field size:')
     for i,(k,v) in enumerate(effective_RF_size.items()):
         print(f'{i}. {k} ' + '.' * (20 - len(k)) + ' {:d}'.format(v))
@@ -334,7 +347,7 @@ if __name__ == '__main__':
         output_file = os.path.join(model_dir,
                                    f'correlations_{experiment_ID[:6]}_{N_bands}-bands_' + \
                                    f'{N_filters}-filters_{N_neurons}-neurons_{N_trials}-trials_' + \
-                                   f'{filter_order}-butter')
+                                   f'{filter_order}-butter_{multi_output_model.layers[-1].name}')
 
     if os.path.isfile(output_file + '.npz') and not force and not make_plots:
         print(f'Output file {output_file}.npz exists: re-run with -f if you want to overwrite it')

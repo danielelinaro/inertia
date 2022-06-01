@@ -97,7 +97,7 @@ def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype
     from scipy.fft import fft, fftfreq
     from scipy.signal import butter, filtfilt
 
-    if 'Wn' in kwargs:
+    if 'Wn' in kwargs and kwargs['Wn'] > 0:
         Wn = kwargs['Wn']
         filter_order = kwargs['filter_order'] if 'filter_order' in kwargs else 10
         if 'btype' in kwargs:

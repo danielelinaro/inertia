@@ -18,6 +18,7 @@ if __name__ == '__main__':
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='PAN netlist')
     parser.add_argument('-o', '--output',  default=None, type=str, help='output file name')
+    parser.add_argument('-O', '--outdir',  default=None, type=str, help='output directory')
     parser.add_argument('--overload',  default=None, type=float, help='overload coefficient (overwrites the value in the config file)')
     parser.add_argument('-f', '--force', action='store_true', help='force overwrite of output file')
     parser.add_argument('--check-stability', action='store_true',
@@ -138,6 +139,8 @@ if __name__ == '__main__':
         if args.overload is not None:
             output_file += f'_lambda={LAMBDA:.3f}'
         output_file += '.h5'
+        if args.outdir is not None:
+            output_file = os.path.join(args.outdir, output_file)
     else:
         output_file = args.output
 

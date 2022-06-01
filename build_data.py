@@ -173,10 +173,7 @@ if __name__ == '__main__':
         N_inertia = inertia_values[generator_IDs[0]].size
     elif inertia_mode == 'sequential':
         inertia_values = config['inertia'].copy()
-        N_inertia = 1
-        for v in inertia_values.values():
-            if len(v) > N_inertia:
-                N_inertia = len(v)
+        N_inertia = max(map(len, inertia_values.values()))
         for k in inertia_values:
             N_values = len(inertia_values[k])
             if N_values == 1:

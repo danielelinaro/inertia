@@ -525,7 +525,7 @@ def predict(model, data_sliding, window_step, rolling_length=50):
     return time, H, y
 
 
-def compute_receptive_field(model, stop_layer=''):
+def compute_receptive_field(model, stop_layer='', include_stop_layer=False):
     '''
     Computes the effective receptive field size and the effective stride of a convolutional neural network.
 
@@ -556,7 +556,7 @@ def compute_receptive_field(model, stop_layer=''):
     else:
         raise ValueError('Argument `stop_layer` should be a layer name, a layer instance or a layer class')
 
-    def stop_here(layer):
+    def is_stop_layer(layer):
         return (stop_layer_name is not None and layer.name == stop_layer_name) or \
             (stop_layer_name is None and isinstance(layer, stop_layer))
 
@@ -564,7 +564,7 @@ def compute_receptive_field(model, stop_layer=''):
     effective_RF_size = {}
     R_prev = 1
     for k,layer in enumerate(model.layers):
-        if stop_here(layer):
+        if not include_stop_layer and is_stop_layer(layer):
             break
         if hasattr(layer, 'kernel_size'):
             # a convolutional layer
@@ -589,13 +589,15 @@ def compute_receptive_field(model, stop_layer=''):
         else:
             effective_RF_size[layer.name] = R_prev
         R_prev = effective_RF_size[layer.name]
+        if is_stop_layer(layer):
+            break
     
     ### compute the effective stride
     layers_with_strides = [layer.name for layer in model.layers if hasattr(layer, 'strides')]
     layer_strides = [layer.strides[0] for layer in model.layers if hasattr(layer, 'strides')]
     effective_stride = {}
     for i,layer in enumerate(model.layers):
-        if stop_here(layer):
+        if not include_stop_layer and is_stop_layer(layer):
             break
         if layer.name in layers_with_strides:
             idx = layers_with_strides.index(layer.name)
@@ -610,6 +612,8 @@ def compute_receptive_field(model, stop_layer=''):
         else:
             # the first layer
             effective_stride[layer.name] = 1
+        if is_stop_layer(layer):
+            break
         
     return effective_RF_size, effective_stride
 
@@ -645,7 +649,7 @@ def compute_correlations(model, X, fs, bands, effective_RF_size, effective_strid
     if verbose: my_print(f'Computing the output of layer {layer_name}... ')
     multi_Y = model(X)
     if verbose: print('done.')
-    Y = multi_Y[-1].numpy()
+    Y = multi_Y[-1].numpy() if isinstance(multi_Y, list) else multi_Y
     _, N_neurons, N_filters = Y.shape
     if verbose: print(f'Layer "{layer_name}" has {N_filters} filters, each with {N_neurons} neurons.')
 
