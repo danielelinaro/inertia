@@ -4,7 +4,8 @@ import tables
 import numpy as np
 
 __all__ = ['read_area_values', 'load_one_block', 'load_data_areas',
-           'load_data_generators', 'load_data_slide', 'slide_window',]
+           'load_data_generators', 'load_data_slide', 'slide_window',
+           'load_data_files']
 
 
 default_H = {
@@ -297,4 +298,32 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
     return time, data, data_normalized, data_sliding, indexes
 
 
-
+def load_data_files(data_files, var_names, generators_areas_map, generators_Pnom, area_measure):
+    import tables
+    fids = [tables.open_file(f) for f in data_files]
+    n_files = len(fids)
+    X = []
+    for var_name in var_names:
+        X.append(np.squeeze(np.array([fid.root[var_name].read() for fid in fids])))
+    X = np.array(X)
+    time = fids[0].root.time.read()
+    n_areas = len(generators_areas_map)
+    y = np.zeros((n_files, n_areas))
+    for i,fid in enumerate(fids):
+        pars = fid.root.parameters.read()
+        generator_IDs = [gen_id.decode('utf-8') for gen_id in pars['generator_IDs'][0]]
+        h = pars['inertia'].squeeze()
+        for j,area_generators in enumerate(generators_areas_map):
+            num, den = 0, 0
+            for gen_ID in area_generators:
+                idx = generator_IDs.index(gen_ID)
+                num += h[idx] * generators_Pnom[gen_ID]
+                den += generators_Pnom[gen_ID]
+            if area_measure.lower() == 'inertia':
+                y[i,j] = num / den          # [s]
+            elif area_measure.lower() == 'energy':
+                y[i,j] = num * 1e-9         # [GW s]
+            elif area_measure.lower() == 'momentum':
+                y[i,j] = 2 * num * 1e-9 / 60.  # [GW s^2]
+        fid.close()
+    return time, X, y
