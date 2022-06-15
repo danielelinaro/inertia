@@ -19,3 +19,5 @@ notebooks/*.png
 nohup.out
 *.pkl
 figures
+area_1_config
+*.json

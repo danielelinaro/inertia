@@ -19,10 +19,8 @@ from dlml.data import load_data_areas
 from dlml.nn import LEARNING_RATE, build_model, train_model, sigint_handler
 from dlml.utils import print_msg, print_warning, print_error
 
-if __name__ == '__main__':
+def main(progname, args):
 
-    progname = os.path.basename(sys.argv[0])
-    
     parser = arg.ArgumentParser(description = 'Train a network to estimate inertia',
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
@@ -31,7 +29,7 @@ if __name__ == '__main__':
     parser.add_argument('--area-measure',  default=None,  type=str, help='area measure (overrides value in configuration file)')
     parser.add_argument('--max-cores',  default=None,  type=int, help='maximum number of cores to be used by Keras)')
     parser.add_argument('--no-comet', action='store_true', help='do not use CometML to log the experiment')
-    args = parser.parse_args(args=sys.argv[1:])
+    args = parser.parse_args(args=args)
 
     config_file = args.config_file
     if not os.path.isfile(config_file):
@@ -81,7 +79,7 @@ if __name__ == '__main__':
         entity_IDs = config['area_IDs']
         entity_name = 'area'
     else:
-        print('One of "area_IDs" or "generator_IDs" must be present in the configuration file.')
+        print_error('One of "area_IDs" or "generator_IDs" must be present in the configuration file.')
         sys.exit(1)
 
     N_entities = len(entity_IDs)
@@ -116,7 +114,7 @@ if __name__ == '__main__':
             sampling_rate = None
         else:
             sampling_rate = 1 / np.diff(t[:2])[0]
-            print(f'Sampling rate: {sampling_rate:g} Hz.')
+            print_msg(f'Sampling rate: {sampling_rate:g} Hz.')
     else:
         raise Exception('This part is not implemented yet')
         # call load_data_generators in deep_utils
@@ -156,9 +154,9 @@ if __name__ == '__main__':
     parameters['steps_per_epoch'] = steps_per_epoch
     output_path = os.path.join(args.output_dir, 'neural_network', experiment_key)
     parameters['output_path'] = output_path
-    print(f'Number of training traces: {N_training_traces}')
-    print(f'Batch size:                {batch_size}')
-    print(f'Steps per epoch:           {steps_per_epoch}')
+    print_msg(f'Number of training traces: {N_training_traces}')
+    print_msg(f'Batch size:                {batch_size}')
+    print_msg(f'Steps per epoch:           {steps_per_epoch}')
 
     ### build the network
     optimizer_pars = config['optimizer'][config['optimizer']['name']]
@@ -183,10 +181,10 @@ if __name__ == '__main__':
         for j,layer in enumerate(model.layers[i : i + N_vars]):
             layer.adapt(x['training'][j].numpy().flatten())
             w = layer.get_weights()
-            print('-' * 35)
-            print(f'{var_names[j]}')
-            print(f'means = {x_train_mean[j]:12.4e}, {w[0][0]:12.4e}')
-            print(f'vars  = {x_train_std[j] ** 2:12.4e}, {w[1][0]:12.4e}')
+            print_msg('-' * 35)
+            print_msg(f'{var_names[j]}')
+            print_msg(f'means = {x_train_mean[j]:12.4e}, {w[0][0]:12.4e}')
+            print_msg(f'vars  = {x_train_std[j] ** 2:12.4e}, {w[1][0]:12.4e}')
 
     model.summary()
 
@@ -343,7 +341,7 @@ if __name__ == '__main__':
     y_test = np.squeeze(y['test'].numpy())
     mape_prediction = losses.mean_absolute_percentage_error(y_test.T, y_prediction.T).numpy()
     for ntt_ID, mape in zip(entity_IDs, mape_prediction):
-        print(f'MAPE on CNN prediction for {entity_name} {ntt_ID} ... {mape:.2f}%')
+        print_msg(f'MAPE on CNN prediction for {entity_name} {ntt_ID} ... {mape:.2f}%')
     test_results = {'y_test': y_test, 'y_prediction': y_prediction, 'mape_prediction': mape_prediction}
 
     best_model.save(output_path)
@@ -403,3 +401,9 @@ if __name__ == '__main__':
         experiment.log_figure('summary', fig)
     plt.savefig(os.path.join(output_path, 'summary.pdf'))
 
+    return output_path
+
+
+if __name__ == '__main__':
+    main(progname = os.path.basename(sys.argv[0]),
+         args = sys.argv[1:])
