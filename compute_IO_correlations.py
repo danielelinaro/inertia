@@ -17,19 +17,6 @@ from dlml.nn import compute_receptive_field, compute_correlations
 
 prog_name = os.path.basename(sys.argv[0])
 
-def usage():
-    print(f'usage: {prog_name} [<options>] <experiment_ID>')
-    print('')
-    print('    -N, --nbands   number of frequency bands in which the range (0.05,Fn)')
-    print('                    will be subdivided (default 20, with Fn the Nyquist frequency)')
-    print('    --stop-layer   name of the layer used for the computation of correlations')
-    print('    -o, --output   output file name')
-    print('    -f, --force    force overwrite of existing data file')
-    print('    --plots        generate plots')
-    print('    -h, --help     print this help message and exit')
-    print('')
-    print(f'Run with {prog_name} 034a1edb0797475b985f0e1335dab383')
-
 
 def plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf, idx, sort_F=1.0, vmin=None, vmax=None):
     import matplotlib.pyplot as plt
@@ -131,6 +118,25 @@ def plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf, idx, sort_F=1.0, vmin=
     return fig, vmin, vmax
 
 
+def usage():
+    print(f'usage: {prog_name} [<options>] <experiment_ID>')
+    print('')
+    print('    -N, --nbands   number of frequency bands in which the range (0.05,Fn)')
+    print('                   will be subdivided (default 20, with Fn the Nyquist frequency)')
+    print('    --stop-layer   name of the layer used for the computation of correlations')
+    print('                   (default: the last layer before the Flatten one)')
+    print('    --sort-f       frequency band used to sort the response of the filter (default: 1.1 Hz)')
+    print('    --spacing      whether to use a logarithmic or linear spacing for the frequency range')
+    print('                   (default "logarithmic", "linear" also accepted)')
+    print('    -o, --output   output file name')
+    print('    -f, --force    force overwrite of existing data file')
+    print('    --plots        generate plots')
+    print('    --order        filter order (default 8)')
+    print('    -h, --help     print this help message and exit')
+    print('')
+    print(f'Run with {prog_name} 034a1edb0797475b985f0e1335dab383')
+
+
 if __name__ == '__main__':
     
     pooling_type = ''
@@ -148,6 +154,7 @@ if __name__ == '__main__':
     filter_order = 8
     spacing = 'log'
     stop_layer = None
+    sort_F = 1.1
 
     while i < n_args:
         arg = sys.argv[i]
@@ -172,6 +179,9 @@ if __name__ == '__main__':
         elif arg == '--order':
             filter_order = int(sys.argv[i+1])
             i += 1
+        elif arg == '--sort-f':
+            sort_F = float(sys.argv[i+1])
+            i += 1
         elif arg == '--stop-layer':
             stop_layer = sys.argv[i+1]
             i += 1
@@ -190,13 +200,17 @@ if __name__ == '__main__':
     if output_file is not None:
         output_file = os.path.splitext(output_file)[0]
 
+    if sort_F <= 0:
+        print('Sort frequency must be > 0')
+        sys.exit(3)
+
     ### Make sure that we have the model requested by the user
     experiment_ID = sys.argv[i]
     experiments_path = 'experiments/neural_network'
     model_dir = os.path.join(experiments_path, experiment_ID)
     if not os.path.isdir(model_dir):
         print(f'{prog_name}: {model_dir}: no such directory')
-        sys.exit(3)
+        sys.exit(4)
 
     network_parameters = pickle.load(open(os.path.join(model_dir, 'parameters.pkl'), 'rb'))
     if 'use_fft' in network_parameters and network_parameters['use_fft']:
@@ -351,7 +365,7 @@ if __name__ == '__main__':
 
     if os.path.isfile(output_file + '.npz') and not force and not make_plots:
         print(f'Output file {output_file}.npz exists: re-run with -f if you want to overwrite it')
-        sys.exit(3)
+        sys.exit(5)
 
     if not os.path.isfile(output_file + '.npz') or force:
         # compute the correlations:
@@ -394,7 +408,6 @@ if __name__ == '__main__':
         F = ret[0]
         Xf = [(ret[1][set_name][i] - m) / (M - m) for i,(m,M) in enumerate(zip(x_train_min_fft,
                                                                                x_train_max_fft))]
-        sort_F = 1.1
         fig,_,_ = plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf[0], IDX, sort_F=sort_F)
         fig.savefig(output_file + '.pdf')
 
