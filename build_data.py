@@ -121,7 +121,7 @@ if __name__ == '__main__':
     
     config_file = args.config_file
     if not os.path.isfile(config_file):
-        print('{}: {}: no such file.'.format(config_file))
+        print('{}: {}: no such file.'.format(prog_name, config_file))
         sys.exit(1)
     config = json.load(open(config_file, 'r'))
     
