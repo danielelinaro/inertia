@@ -1,0 +1,17 @@
+{
+    "training_config_file": "config/network_training_config_IEEE39_PF_converted.json",
+    "algorithm": "grid",
+    "parameters": {
+        "kernel_size": {
+            "type": "integer",
+            "min": 14,
+            "max": 16
+        }
+    },
+    "spec": {
+        "metric": "val_loss",
+        "objective": "minimize",
+        "gridSize": 3
+    },
+    "trials": 3
+}

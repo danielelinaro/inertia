@@ -1,0 +1,13 @@
+{
+    "training_config_file": "config/network_training_config_IEEE39_PF_converted.json",
+    "algorithm": "random",
+    "parameters": {
+        "kernel_size": {"type": "discrete", "values": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]}
+    },
+    "spec": {
+        "maxCombo": 0,
+        "metric": "val_loss",
+        "objective": "minimize"
+    },
+    "trials": 5
+}
