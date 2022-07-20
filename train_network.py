@@ -19,7 +19,7 @@ from dlml.data import load_data_areas
 from dlml.nn import LEARNING_RATE, build_model, train_model, sigint_handler
 from dlml.utils import print_msg, print_warning, print_error
 
-def main(progname, args):
+def main(progname, args, experiment=None):
 
     parser = arg.ArgumentParser(description = 'Train a network to estimate inertia',
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
@@ -58,14 +58,18 @@ def main(progname, args):
             print_warning('Maximum number of cores must be positive.')
 
     log_to_comet = not args.no_comet
+    if not log_to_comet and experiment is not None:
+        print_warning('Ignoring the --no-comet option since the `experiment` argument is not None')
+        log_to_comet = True
     
     if log_to_comet:
         ### create a CometML experiment
-        experiment = Experiment(
-            api_key = os.environ['COMET_API_KEY'],
-            project_name = 'inertia',
-            workspace = 'danielelinaro'
-        )
+        if experiment is None:
+            experiment = Experiment(
+                api_key = os.environ['COMET_API_KEY'],
+                project_name = 'inertia',
+                workspace = 'danielelinaro'
+            )
         experiment_key = experiment.get_key()
     else:
         experiment = None
@@ -120,6 +124,18 @@ def main(progname, args):
         # call load_data_generators in deep_utils
 
     N_vars, N_training_traces, N_samples = x['training'].shape
+
+    binary_classification = config['loss_function']['name'].lower() == 'binarycrossentropy'
+    if binary_classification:
+        means = np.mean(y['training'], axis=0)
+        for i,mean in enumerate(means):
+            for key in y:
+                below,_ = np.where(y[key] <= mean)
+                above,_ = np.where(y[key] > mean)
+                tmp = y[key].numpy()
+                tmp[below] = 0
+                tmp[above] = 1
+                y[key] = tf.constant(tmp)
 
     # we always compute mean and std of the training set, whether we'll be using them or not
     x_train_mean = np.mean(x['training'], axis=(1, 2))
@@ -246,6 +262,8 @@ def main(progname, args):
             experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs_to_learn_inertia']]))
             if len(bus_numbers) > 0: experiment.add_tag('buses_' + '_'.join(map(str, bus_numbers)))
             if len(line_numbers) > 0: experiment.add_tag('lines_' + '_'.join(map(lambda l: f'{l[0]}-{l[1]}', line_numbers)))
+        if binary_classification:
+            experiment.add_tag('binary_classification')
         if use_fft:
             experiment.add_tag('fft')
         try:
@@ -337,12 +355,22 @@ def main(progname, args):
     if isinstance(y_prediction, list):
         y_prediction = np.squeeze(np.array(y_prediction).T)
 
-    ### compute the mean absolute percentage error on the CNN prediction
     y_test = np.squeeze(y['test'].numpy())
-    mape_prediction = losses.mean_absolute_percentage_error(y_test.T, y_prediction.T).numpy()
-    for ntt_ID, mape in zip(entity_IDs, mape_prediction):
-        print_msg(f'MAPE on CNN prediction for {entity_name} {ntt_ID} ... {mape:.2f}%')
-    test_results = {'y_test': y_test, 'y_prediction': y_prediction, 'mape_prediction': mape_prediction}
+    test_results = {'y_test': y_test, 'y_prediction': y_prediction}
+
+    if binary_classification:
+        ### compute the accuracy of the CNN prediction
+        _,_,acc_prediction = best_model.evaluate(tf.squeeze(x['test']), y['test'], verbose=0)
+        print(f'Accuracy of CNN prediction on the test set ... {acc_prediction*100:.2f}%')
+        y_prediction = np.round(keras.activations.sigmoid(y_prediction).numpy())
+        test_results['y_prediction'] = y_prediction
+        test_results['acc_prediction'] = acc_prediction
+    else:
+        ### compute the mean absolute percentage error on the CNN prediction
+        mape_prediction = losses.mean_absolute_percentage_error(y_test.T, y_prediction.T).numpy()
+        for ntt_ID, mape in zip(entity_IDs, mape_prediction):
+            print_msg(f'MAPE on CNN prediction for {entity_name} {ntt_ID} ... {mape:.2f}%')
+        test_results['mape_prediction'] = mape_prediction
 
     best_model.save(output_path)
     pickle.dump(parameters, open(os.path.join(output_path, 'parameters.pkl'), 'wb'))
@@ -353,7 +381,10 @@ def main(progname, args):
     keras.utils.plot_model(model, os.path.join(output_path, 'network_topology.png'), show_shapes=True, dpi=300)
 
     if log_to_comet:
-        experiment.log_metric('mape_prediction', mape_prediction)
+        if binary_classification:
+            experiment.log_metric('acc_prediction', acc_prediction)
+        else:
+            experiment.log_metric('mape_prediction', mape_prediction)
         experiment.log_model('best_model', os.path.join(output_path, 'saved_model.pb'))
         experiment.log_image(os.path.join(output_path, 'network_topology.png'), 'network_topology')
 
@@ -405,5 +436,4 @@ def main(progname, args):
 
 
 if __name__ == '__main__':
-    main(progname = os.path.basename(sys.argv[0]),
-         args = sys.argv[1:])
+    main(progname=os.path.basename(sys.argv[0]), args=sys.argv[1:])

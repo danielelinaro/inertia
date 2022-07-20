@@ -256,11 +256,18 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
     if N_dims not in (1,2):
         raise Exception('The number of dimensions of the data must be either 1 or 2')
 
+    metrics = None
     loss_fun_name = loss_fun_pars['name'].lower()
     if loss_fun_name == 'mae':
         loss = losses.MeanAbsoluteError()
     elif loss_fun_name == 'mape':
         loss = losses.MeanAbsolutePercentageError()
+    elif loss_fun_name == 'binarycrossentropy':
+        try:
+            loss = losses.BinaryCrossentropy(from_logits=loss_fun_pars['from_logits'])
+        except:
+            loss = losses.BinaryCrossentropy(from_logits=True)
+        metrics = ['binary_crossentropy', 'acc']
     else:
         raise Exception('Unknown loss function: {}.'.format(loss_function))
 
@@ -435,7 +442,10 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
         outputs = [make_dense_stream(L, N_units, N_outputs, model_arch, 1)]
 
     model = keras.Model(inputs=inputs, outputs=outputs)
-    model.compile(optimizer=optimizer, loss=loss)
+    if metrics is None:
+        model.compile(optimizer=optimizer, loss=loss)
+    else:
+        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
     return model, optimizer, loss
 
 
@@ -480,7 +490,7 @@ def train_model(model, x, y,
                                                               verbose = verbose,
                                                               mode = cb_pars['mode'],
                                                               cooldown = cb_pars['cooldown'],
-                                                              min_lr = cb_pars['min_lr'])
+                                                              min_lr = cb_pars['min_learning_rate'])
                 cbs.append(lr_scheduler_cb)
                 print_msg('Added callback for reducing learning rate on plateaus.')
             else:
