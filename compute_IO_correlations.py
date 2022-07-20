@@ -226,6 +226,7 @@ if __name__ == '__main__':
         sys.exit(4)
 
     network_parameters = pickle.load(open(os.path.join(model_dir, 'parameters.pkl'), 'rb'))
+    binary_classification = network_parameters['loss_function']['name'].lower() == 'binarycrossentropy'
     if 'use_fft' in network_parameters and network_parameters['use_fft']:
         raise Exception('This script assumes that the input data be in the time domain')
 
@@ -312,7 +313,7 @@ if __name__ == '__main__':
                           network_parameters['generators_Pnom'],
                           network_parameters['area_measure'],
                           trial_dur=network_parameters['trial_duration'],
-                          max_block_size=100,
+                          max_block_size=1000,
                           use_tf=False, add_omega_ref=True,
                           use_fft=False)
     
@@ -320,14 +321,23 @@ if __name__ == '__main__':
     X = [(ret[1][set_name][i] - m) / s for i,(m,s) in enumerate(zip(x_train_mean, x_train_std))]
     y = ret[2][set_name]
 
-    ### Predict the momentum using the model
-    IDX = [np.where(y == mom)[0] for mom in np.unique(y)]
-    n_mom_values = len(IDX)
-    momentum = [np.squeeze(model.predict(X[0][jdx])) for jdx in IDX]
-    mean_momentum = [m.mean() for m in momentum]
-    stddev_momentum = [m.std() for m in momentum]
-    print('Mean momentum (with optimized weights):', mean_momentum)
-    print(' Std momentum (with optimized weights):', stddev_momentum)
+    if binary_classification:
+        IDX = [np.where(y < y.mean())[0], np.where(y > y.mean())[0]]
+        n_mom_values = len(IDX)
+        y[IDX[0]] = 0
+        y[IDX[1]] = 1
+        classes = [np.round(tf.keras.activations.sigmoid(model.predict(X[0][jdx]))) for jdx in IDX]
+        _,_,accuracy = model.evaluate(tf.squeeze(X[0]), y, verbose=0)
+        print(f'Prediction accuracy (with optimized weights): {accuracy*100:.2f}%.')
+    else:
+        ### Predict the momentum using the model
+        IDX = [np.where(y == mom)[0] for mom in np.unique(y)]
+        n_mom_values = len(IDX)
+        momentum = [np.squeeze(model.predict(X[0][jdx])) for jdx in IDX]
+        mean_momentum = [m.mean() for m in momentum]
+        stddev_momentum = [m.std() for m in momentum]
+        print('Mean momentum (with optimized weights):', mean_momentum)
+        print(' Std momentum (with optimized weights):', stddev_momentum)
 
     ### Clone the trained model
     # This initializes the cloned model with new random weights and will be used in the
@@ -338,11 +348,17 @@ if __name__ == '__main__':
         # we have some subclassed layers
         for i in range(len(model.layers)):
             reinit_model.layers[i]._name = model.layers[i].name
-    reinit_momentum = [np.squeeze(reinit_model.predict(X[0][jdx])) for jdx in IDX]
-    mean_reinit_momentum = [m.mean() for m in reinit_momentum]
-    stddev_reinit_momentum = [m.std() for m in reinit_momentum]
-    print('Mean momentum (with random weights):', mean_reinit_momentum)
-    print(' Std momentum (with random weights):', stddev_reinit_momentum)
+    if binary_classification:
+        reinit_model.compile(metrics=['binary_crossentropy', 'acc'])
+        reinit_classes = [np.round(tf.keras.activations.sigmoid(reinit_model.predict(X[0][jdx]))) for jdx in IDX]
+        _,_,reinit_accuracy = reinit_model.evaluate(tf.squeeze(X[0]), y, verbose=0)
+        print(f'Prediction accuracy (with random weights): {reinit_accuracy*100:.2f}%.')
+    else:
+        reinit_momentum = [np.squeeze(reinit_model.predict(X[0][jdx])) for jdx in IDX]
+        mean_reinit_momentum = [m.mean() for m in reinit_momentum]
+        stddev_reinit_momentum = [m.std() for m in reinit_momentum]
+        print('Mean momentum (with random weights):', mean_reinit_momentum)
+        print(' Std momentum (with random weights):', stddev_reinit_momentum)
 
     ### Build a model with as many outputs as there are convolutional or pooling layers
     outputs = [layer.output for layer in model.layers \
