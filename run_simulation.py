@@ -17,9 +17,11 @@ if __name__ == '__main__':
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='PAN netlist')
-    parser.add_argument('-o', '--output',  default=None, type=str, help='output file name')
-    parser.add_argument('-O', '--outdir',  default=None, type=str, help='output directory')
-    parser.add_argument('--overload',  default=None, type=float, help='overload coefficient (overwrites the value in the config file)')
+    parser.add_argument('-o', '--output', default=None, type=str, help='output file name')
+    parser.add_argument('-O', '--outdir', default=None, type=str, help='output directory')
+    parser.add_argument('-S', '--suffix', default=None, type=str, help='suffix to prepend to file extension')
+    parser.add_argument('--overload', default=None, type=float,
+                        help='overload coefficient (overwrites the value in the config file)')
     parser.add_argument('-f', '--force', action='store_true', help='force overwrite of output file')
     parser.add_argument('--check-stability', action='store_true',
                         help='check that the system is stable by running a pole-zero analysis')
@@ -138,6 +140,8 @@ if __name__ == '__main__':
                 '_'.join(['-'.join(map(lambda h: f'{h:.3f}', np.unique(H))) for H in inertia_values])
         if args.overload is not None:
             output_file += f'_lambda={LAMBDA:.3f}'
+        if args.suffix is not None:
+            output_file += '_' + args.suffix.lstrip('_')
         output_file += '.h5'
         if args.outdir is not None:
             output_file = os.path.join(args.outdir, output_file)

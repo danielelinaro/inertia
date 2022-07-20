@@ -121,18 +121,19 @@ def plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf, idx, sort_F=1.0, vmin=
 def usage():
     print(f'usage: {prog_name} [<options>] <experiment_ID>')
     print('')
-    print('    -N, --nbands   number of frequency bands in which the range (0.05,Fn)')
-    print('                   will be subdivided (default 20, with Fn the Nyquist frequency)')
-    print('    --stop-layer   name of the layer used for the computation of correlations')
-    print('                   (default: the last layer before the Flatten one)')
-    print('    --sort-f       frequency band used to sort the response of the filter (default: 1.1 Hz)')
-    print('    --spacing      whether to use a logarithmic or linear spacing for the frequency range')
-    print('                   (default "logarithmic", "linear" also accepted)')
-    print('    -o, --output   output file name')
-    print('    -f, --force    force overwrite of existing data file')
-    print('    --plots        generate plots')
-    print('    --order        filter order (default 8)')
-    print('    -h, --help     print this help message and exit')
+    print('    -N, --nbands     number of frequency bands in which the range (0.05,Fn)')
+    print('                     will be subdivided (default 20, with Fn the Nyquist frequency)')
+    print('    --stop-layer     name of the layer used for the computation of correlations')
+    print('                     (default: the last layer before the Flatten one)')
+    print('    --sort-f         frequency band used to sort the response of the filter (default: 1.1 Hz)')
+    print('    --spacing        whether to use a logarithmic or linear spacing for the frequency range')
+    print('                     (default "logarithmic", "linear" also accepted)')
+    print('    -o, --output     output file name')
+    print('    -f, --force      force overwrite of existing data file')
+    print('    --plots          generate plots')
+    print('    --order          filter order (default 8)')
+    print('    --vmin, --vmax   minimum and maximum values of the correlations colormap')
+    print('    -h, --help       print this help message and exit')
     print('')
     print(f'Run with {prog_name} 034a1edb0797475b985f0e1335dab383')
 
@@ -155,6 +156,7 @@ if __name__ == '__main__':
     spacing = 'log'
     stop_layer = None
     sort_F = 1.1
+    vmin, vmax = None, None
 
     while i < n_args:
         arg = sys.argv[i]
@@ -185,6 +187,12 @@ if __name__ == '__main__':
         elif arg == '--stop-layer':
             stop_layer = sys.argv[i+1]
             i += 1
+        elif arg == '--vmin':
+            vmin = float(sys.argv[i+1])
+            i += 1
+        elif arg == '--vmax':
+            vmax = float(sys.argv[i+1])
+            i += 1
         else:
             break
         i += 1
@@ -203,6 +211,11 @@ if __name__ == '__main__':
     if sort_F <= 0:
         print('Sort frequency must be > 0')
         sys.exit(3)
+
+    if vmin is not None and vmax is None:
+        vmax = -vmin
+    if vmax is not None and vmin is None:
+        vmin = -vmax
 
     ### Make sure that we have the model requested by the user
     experiment_ID = sys.argv[i]
@@ -408,6 +421,6 @@ if __name__ == '__main__':
         F = ret[0]
         Xf = [(ret[1][set_name][i] - m) / (M - m) for i,(m,M) in enumerate(zip(x_train_min_fft,
                                                                                x_train_max_fft))]
-        fig,_,_ = plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf[0], IDX, sort_F=sort_F)
+        fig,_,_ = plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf[0], IDX, sort_F=sort_F, vmin=vmin, vmax=vmax)
         fig.savefig(output_file + '.pdf')
 

@@ -72,8 +72,7 @@ if __name__ == '__main__':
         kernel_size.append(experiment.get_parameter('kernel_size'))
         training_config['model_arch']['kernel_size'] = [kernel_size[-1] for _ in range(N_conv_layers)]
         json.dump(training_config, open(training_config_file, 'w'), indent=4)
-        output_path = train_network.main(progname='train_network.py',
-                                         args=args)
+        output_path = train_network.main(progname='train_network.py', args=args, experiment=experiment)
         history = pickle.load(open(os.path.join(output_path, 'history.pkl'), 'rb'))
         loss.append(min(history['loss']))
         val_loss.append(min(history['val_loss']))

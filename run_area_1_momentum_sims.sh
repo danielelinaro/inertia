@@ -2,8 +2,9 @@
 
 # this script changes the values of inertia of G2 and G3 to keep the area momentum fixed
 
-N=100
-outdir="data/IEEE39/converted_from_PowerFactory/all_stoch_loads/lowlow_momentum_test_var_G1_G2"
+N=10
+reps=200
+outdir="data/IEEE39/converted_from_PowerFactory/all_stoch_loads/low_momentum_test_var_G1_G2"
 # default values of inertia of G2, G3 and the compensator in area 1
 G02Hdef=2.932
 G03Hdef=3.247
@@ -30,6 +31,10 @@ G02H=( $(python3 linspace.py $G02Hlow $G02Hhigh $N) )
 for g02h in ${G02H[@]} ; do
     g03h=`printf %.3f $(echo "($Mdef*1000*30-$g02h*$G02S-$Comp11H*$Comp11S)/$G03S" | bc -l)`
     sed -e 's/#G02H#/'$g02h'/' -e 's/#G03H#/'$g03h'/' $inconfig > $outconfig
-    python3 run_simulation.py -O $outdir $outconfig
+    for i in `seq $reps` ; do
+	suffix=`printf %03d $i`
+	python3 run_simulation.py -O $outdir -S $suffix $outconfig &
+    done
+    wait
 done
 
