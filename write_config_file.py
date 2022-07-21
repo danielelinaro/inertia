@@ -57,11 +57,12 @@ def usage():
     print(f'    -F, --sampling-rate     sampling rate (default: {default_config["srate"]} Hz)')
     print(f'    -d, --decimation        decimation (default: {default_config["decimation"]})')
     print( '    -o, --output            output file name pattern (default: config.json)')
-    print( '    -g, --gen               generator name')
+    print( '    -g, --gen               generator name(s)')
     print( '    -f, --force             force overwrite of existing file(s)')
     print( '    -h, --help              print this help message and exit')
     print('')
-    print('inertia can be a scalar or a Python expression that produces a list of values')
+    print('inertia can be a (comma-separated list of) scalar(s) or a')
+    print('(semicolon-separated list of) Python expression(s) producing a list of values')
 
 
 if __name__ == '__main__':
@@ -116,11 +117,12 @@ if __name__ == '__main__':
         elif arg in ('-f', '--force'):
             force = True
         elif arg in ('-g', '--gen'):
-            gen_name = sys.argv[i+1]
+            gen_names = sys.argv[i+1].split(',')
             i += 1
-            if gen_name not in default_config['inertia']:
-                print(f'Generator `{gen_name}` not present.')
-                sys.exit(5)
+            for gen_name in gen_names:
+                if gen_name not in default_config['inertia']:
+                    print(f'Generator `{gen_name}` not present.')
+                    sys.exit(5)
         else:
             break
         i += 1
@@ -128,14 +130,25 @@ if __name__ == '__main__':
     if i == n_args:
         usage()
 
-    H = eval(sys.argv[i])
+    exprs = sys.argv[i].split(';')
+    if len(gen_names) != len(exprs):
+        print('The number of generators must match the values of inertia')
+        sys.exit(6)
 
-    if np.isscalar(H):
-        H = [H]
+    H = [eval(expr) for expr in exprs]
+    X = [x.flatten() for x in np.meshgrid(*H)]
+    n,m = len(X), X[0].size
+    H = np.zeros((m,n))
+    for i in range(m):
+        for j in range(n):
+            H[i,j] = X[j][i]
+
+    if H.size == 1:
+        H = H[0,0]
         with_suffix = False
     else:
         with_suffix = True
-        fmt = '{}_{:0' + str(int(np.ceil(np.log10(len(H))))) + 'd}{}'
+        fmt = '{}_{:0' + str(int(np.ceil(np.log10(H.shape[0])))) + 'd}{}'
 
     config = default_config.copy()
     config['dur'] = dur
@@ -147,7 +160,8 @@ if __name__ == '__main__':
         os.mkdir(output_dir)
 
     for i,h in enumerate(H):
-        config['inertia'][gen_name] = [h]
+        for j in range(n):
+            config['inertia'][gen_names[j]] = [h[j]]
         if with_suffix:
             outfile = os.path.join(output_dir, fmt.format(output_file, i+1, ext))
         else:
