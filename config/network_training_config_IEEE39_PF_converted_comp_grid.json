@@ -1,6 +1,6 @@
 {
     "area_IDs": [1],
-    "data_dirs": ["data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_{}_comp_grid"],
+    "data_dirs": ["data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_{}_comp_grid/subset_2"],
     "area_IDs_to_learn_inertia": [1],
     "generators_areas_map": [
 	["G02", "G03", "Comp11"],
@@ -33,9 +33,9 @@
 	"kernel_size": [5, 5, 5],
 	"dropout_coeff": 0.0
     },
+    "low_high": false,
     "loss_function": {
-	"name": "BinaryCrossentropy",
-	"from_logits": true
+	"name": "MAE"
     },
     "optimizer": {
 	"name": "Adam",

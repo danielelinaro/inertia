@@ -226,6 +226,7 @@ if __name__ == '__main__':
         sys.exit(4)
 
     network_parameters = pickle.load(open(os.path.join(model_dir, 'parameters.pkl'), 'rb'))
+    low_high = network_parameters['low_high'] if 'low_high' in network_parameters else False
     binary_classification = network_parameters['loss_function']['name'].lower() == 'binarycrossentropy'
     if 'use_fft' in network_parameters and network_parameters['use_fft']:
         raise Exception('This script assumes that the input data be in the time domain')
@@ -330,6 +331,11 @@ if __name__ == '__main__':
         _,_,accuracy = model.evaluate(tf.squeeze(X[0]), y, verbose=0)
         print(f'Prediction accuracy (with optimized weights): {accuracy*100:.2f}%.')
     else:
+        if low_high:
+            below,_ = np.where(y < y.mean())
+            above,_ = np.where(y > y.mean())
+            y[below] = y[below].mean()
+            y[above] = y[above].mean()
         ### Predict the momentum using the model
         IDX = [np.where(y == mom)[0] for mom in np.unique(y)]
         n_mom_values = len(IDX)
