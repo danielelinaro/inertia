@@ -13,8 +13,7 @@ import tables
 
 import pypan.ui as pan
 
-__all__ = ['BaseParameters', 'OU', 'OU_TH', 'generator_ids',
-           'optimize_compensators_set_points', 'save_compensators_info']
+__all__ = ['BaseParameters', 'OU', 'OU_TH', 'generator_ids', 'save_compensators_info']
 
 progname = os.path.basename(sys.argv[0])
 generator_ids = {'IEEE14': (1,2,3,6,8), 'two-area': (1,2,3,4)}
@@ -53,36 +52,6 @@ def OU_TH(dt, alpha, mu, c, N, random_state = None):
     tmp = np.cumsum(np.r_[0, np.sqrt(np.diff(np.exp(2 * alpha * t) - 1)) * rnd])
     ou = ou0 * ex + mu * (1 - ex) + c * ex * tmp / np.sqrt(2 * alpha);
     return ou
-
-
-def optimize_compensators_set_points(compensators, pan_libs, Qmax=50, verbose=True):
-    def cost(set_points, compensators, pan_libs):
-        mem_vars = []
-        for (name,bus),vg in zip(compensators.items(), set_points):
-            pan.alter('Alvg', 'vg', vg, pan_libs, instance=name, annotate=0, invalidate=0)
-            mem_vars.append(bus + ':d')
-            mem_vars.append(bus + ':q')
-            mem_vars.append(name + ':id')
-            mem_vars.append(name + ':iq')
-        Q = np.zeros(len(compensators))
-        lf = pan.DC('Lf', mem_vars=mem_vars, libs=pan_libs, nettype=1, annotate=0)
-        for i,(Vd,Vq,Id,Iq) in enumerate(zip(lf[0::4], lf[1::4], lf[2::4], lf[3::4])):
-            V = Vd[0] + 1j * Vq[0]
-            I = Id[0] + 1j * Iq[0]
-            S = V * I.conj()
-            Q[i] = -S.imag * 1e-6
-        return Q
-
-    from scipy.optimize import fsolve
-    Vgopt = fsolve(cost, np.ones(len(compensators)), args=(compensators, pan_libs))
-    Q = cost(Vgopt, compensators, pan_libs) * 1e6 # [VAR]
-    if np.any(np.abs(Q) > Qmax):
-        raise Exception('Optimization of compensators set points failed')
-    if verbose:
-        print('Setting optimal compensators set points:')
-    for name,vg in zip(compensators, Vgopt):
-        pan.alter('Alvg', 'vg', vg, pan_libs, instance=name, annotate=3 if verbose else 0, invalidate=0)
-    return Vgopt, Q
 
 
 def save_compensators_info(fid, compensators, set_points, Q):
@@ -125,20 +94,6 @@ if __name__ == '__main__':
         sys.exit(1)
     config = json.load(open(config_file, 'r'))
     
-    if 'compensators' in config and isinstance(config['compensators'], dict):
-        # these are just placeholder variables, they will be overwritten in the following
-        n = 10
-        t = np.arange(n)
-        x = np.random.uniform(size=n)
-        for bus in config['variable_load_buses']:
-            exec(f'load_samples_bus_{bus} = np.vstack((t, x))')
-        # I do this here because doing it later causes an instability in the simulation
-        # I haven't figured out why, but the problem seems to be the call to pan.DC in
-        # the function optimize_compensators_set_points
-        _,libs = pan.load_netlist(config['netlist'])
-        compensators = {}
-        compensators['vg'], compensators['Q'] = optimize_compensators_set_points(config['compensators'], libs)
-
     # OU parameters
     alpha = config['OU']['alpha']
     mu = config['OU']['mu']
@@ -223,6 +178,17 @@ if __name__ == '__main__':
                 print(f'Cannot copy {va_file} to /tmp: trying to continue anyway...')
         shutil.copyfile(pan_file, fid.name)
         pan_file = fid.name
+
+    if 'compensators' in config and isinstance(config['compensators'], dict):
+        import subprocess, re
+        output = subprocess.run(['python3', 'optimize_compensators_set_points.py', config_file, pan_file],
+                                capture_output=True, encoding='utf-8')
+        vg = re.findall('vg = \[.*]', output.stdout)[0]
+        Q = re.findall('Q = \[.*]', output.stdout)[0]
+        compensators = {
+            'vg': np.array(list(map(float, re.findall('\d+.\d+', vg)))),
+            'Q': np.array(list(map(float, re.findall('\d+.\d+', Q))))
+        }
 
     ok,libs = pan.load_netlist(pan_file)
     if not ok:
@@ -314,10 +280,14 @@ if __name__ == '__main__':
         if os.path.isfile(out_file):
             continue
 
-        # run a poles/zeros analysis to save data about the stability of the system
-        poles = pan.PZ('Pz', mem_vars=['poles'], libs=libs, nettype=1, annotate=0)
-        # sort the poles in descending order and convert them to Hz
-        poles = poles[:, [i for i in np.argsort(poles.real)[0][::-1]]] / (2 * np.pi)
+        try:
+            if config['run_PZ_analysis']:
+                # run a poles/zeros analysis to save data about the stability of the system
+                poles = pan.PZ('Pz', mem_vars=['poles'], libs=libs, nettype=1, annotate=0)
+                # sort the poles in descending order and convert them to Hz
+                poles = poles[:, [i for i in np.argsort(poles.real)[0][::-1]]] / (2 * np.pi)
+        except:
+            pass
 
         ### first of all, write to file all the data and parameters that we already have
         fid = tables.open_file(out_file, 'w', filters=compression_filter)
@@ -344,10 +314,16 @@ if __name__ == '__main__':
 
         try:
             save_compensators_info(fid, config['compensators'], compensators['vg'], compensators['Q'])
+            for (name,bus),vg in zip(config['compensators'].items(), compensators['vg']):
+                pan.alter('Alvg', 'vg', vg, libs, instance=name, annotate=1, invalidate=0)
         except:
             pass
 
-        fid.create_array(fid.root, 'poles', poles)
+        try:
+            if config['run_PZ_analysis']:
+                fid.create_array(fid.root, 'poles', poles)
+        except:
+            pass
 
         for bus in variable_load_buses:
             fid.create_earray(fid.root, f'load_samples_bus_{bus}', atom, earray_shape)
@@ -371,6 +347,16 @@ if __name__ == '__main__':
             data = pan.tran('Tr', tstop, mem_vars, libs, nettype=1,
                             method=1, timepoints=1/srate, forcetps=1,
                             maxiter=65, saman=1, sparse=2)
+
+            # this is a sort of error checking mechanism that should
+            # catch those situations in which the electrical variables oscillate
+            # (either because of some error in the code or because of instability)
+            MIN = np.array([d.min() for d,mem_var in zip(data, mem_vars) if mem_var != 'time'])
+            MAX = np.array([d.max() for d,mem_var in zip(data, mem_vars) if mem_var != 'time'])
+            STD = np.array([d.std() for d,mem_var in zip(data, mem_vars) if mem_var != 'time'])
+            idx, = np.where((MIN < 0) & (MAX > 0) & (STD > 1000))
+            if len(idx) > 0:
+                raise Exception('ERROR: the system is potentially unstable, terminating the simulation')
 
             # save the results to file
             get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]

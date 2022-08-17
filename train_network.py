@@ -125,16 +125,23 @@ def main(progname, args, experiment=None):
 
     N_vars, N_training_traces, N_samples = x['training'].shape
 
+    low_high = config['low_high'] if 'low_high' in config else False
     binary_classification = config['loss_function']['name'].lower() == 'binarycrossentropy'
-    if binary_classification:
+    if low_high or binary_classification:
         means = np.mean(y['training'], axis=0)
         for i,mean in enumerate(means):
             for key in y:
                 below,_ = np.where(y[key] <= mean)
                 above,_ = np.where(y[key] > mean)
                 tmp = y[key].numpy()
-                tmp[below] = 0
-                tmp[above] = 1
+                if binary_classification:
+                    # binary classification has precedence, given that the binary cross-entropy
+                    # loss function only works with binary target values
+                    tmp[below] = 0
+                    tmp[above] = 1
+                else:
+                    tmp[below] = tmp[below].mean()
+                    tmp[above] = tmp[above].mean()
                 y[key] = tf.constant(tmp)
 
     # we always compute mean and std of the training set, whether we'll be using them or not
@@ -264,6 +271,8 @@ def main(progname, args, experiment=None):
             if len(line_numbers) > 0: experiment.add_tag('lines_' + '_'.join(map(lambda l: f'{l[0]}-{l[1]}', line_numbers)))
         if binary_classification:
             experiment.add_tag('binary_classification')
+        elif low_high:
+            experiment.add_tag('low_high_prediction')
         if use_fft:
             experiment.add_tag('fft')
         try:
