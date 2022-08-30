@@ -1,3 +1,3 @@
 #!/bin/bash
 
-rsync -avzhu daniele@ws-poli:/home/daniele/Research/deep-power/data/IEEE39 data
+rsync -avzhu --exclude *WRONG daniele@ws-poli:/home/daniele/Research/deep-power/data/IEEE39 data
