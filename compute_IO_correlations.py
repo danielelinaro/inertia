@@ -1,5 +1,5 @@
 
-import os
+0;95;0cimport os
 import sys
 import glob
 import pickle
@@ -18,45 +18,43 @@ from dlml.nn import compute_receptive_field, compute_correlations
 prog_name = os.path.basename(sys.argv[0])
 
 
-def plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf, idx, sort_F=1.0, vmin=None, vmax=None):
+def plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf, idx, merge_indexes=False, sort_freq=1.0, vmin=None, vmax=None):
     import matplotlib.pyplot as plt
     import matplotlib
+    from matplotlib.gridspec import GridSpec
     fntsize = 8
     matplotlib.rc('font', size=fntsize)
 
+    idx_spectra = idx
+    if merge_indexes:
+        idx = [np.concatenate(idx)]
     if p is not None:
         R = R.copy()
-        R[p > 0.05] = 0
+        R[p > 0.05] = np.nan
     if p_ctrl is not None:
         R_ctrl = R_ctrl.copy()
-        R_ctrl[p_ctrl > 0.05] = 0
-    R_mean = [R[jdx].mean(axis=0) for jdx in idx]
-    R_ctrl_mean = [R_ctrl[jdx].mean(axis=0) for jdx in idx]
-    rows = len(idx)    
-    edge = np.abs(edges - sort_F).argmin()
-    for i in range(rows):
-        kdx = np.argsort(R_mean[i][edge,:])
-        R_mean[i] = R_mean[i][:,kdx]
-        kdx = np.argsort(R_ctrl_mean[i][edge,:])
-        R_ctrl_mean[i] = R_ctrl_mean[i][:,kdx]
+        R_ctrl[p_ctrl > 0.05] = np.nan
+    R_mean = [np.nanmean(R[jdx], axis=0) for jdx in idx]
+    R_ctrl_mean = [np.nanmean(R_ctrl[jdx], axis=0) for jdx in idx]
+    R_abs_mean = [np.mean(np.abs(r), axis=1) for r in R_mean]
+    R_ctrl_abs_mean = [np.mean(np.abs(r), axis=1) for r in R_ctrl_mean]
 
-    fig = plt.figure(figsize=(8, 3*rows))
-    offset = 0.02, 0.01 + max([0.08 - rows * 0.01, 0])
-    border = 0.05, 0.01 + max([0.06 - rows * 0.01, 0])
-    space = 0.1, 0.025
-    w = 0.17, 0.29, 0.325
-    h = 0.75
-    h = (1 - offset[1] - border[1] - space[1]*(rows-1)) / rows
-    cols = 3
-    ax = []
-    for i in range(rows):
-        y = 1 - border[1] - (i+1) * h - i * space[1]
-        ax.append([fig.add_axes([offset[0], y, w[0], h]),
-                   fig.add_axes([offset[0] + w[0] + space[0], y, w[1], h]),
-                   fig.add_axes([offset[0] + np.sum(w[:2]) + np.sum(space), y, w[2], h])])
-    cmap = plt.get_cmap('tab10', len(idx))
+    rows, cols = len(idx), 4
+    if sort_freq is not None:
+        if np.isscalar(sort_freq):
+            sort_freq += np.zeros(rows)
+        edge = np.array([np.abs(edges - freq).argmin() for freq in sort_freq])
+        for i in range(rows):
+            kdx = np.argsort(R_mean[i][edge[i],:])
+            R_mean[i] = R_mean[i][:,kdx]
+            R_ctrl_mean[i] = R_ctrl_mean[i][:,kdx]
+
+    fig = plt.figure(figsize=(2+(cols-1)*3, 3*rows))
+    gs = GridSpec(rows, cols, figure=fig, width_ratios=[1,2,2,1])
+    ax = [[fig.add_subplot(gs[i,j]) for j in range(cols)] for i in range(rows)]
+    cmap = plt.get_cmap('tab10', len(idx_spectra))
     fft_max = 0
-    for j,jdx in enumerate(idx):
+    for j,jdx in enumerate(idx_spectra):
         mean = Xf[jdx].mean(axis=0)
         stddev = Xf[jdx].std(axis=0)
         ci = 1.96 * stddev / np.sqrt(jdx.size)
@@ -94,12 +92,19 @@ def plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf, idx, sort_F=1.0, vmin=
         for j,R in enumerate((R_mean[i], R_ctrl_mean[i])):
             x = np.arange(R.shape[-1])
             im = ax[i][j+1].pcolormesh(x, y, R, vmin=vmin, vmax=vmax, shading='auto', cmap=cmap)
-            for side in 'right','top':
-                ax[i][j+1].spines[side].set_visible(False)
             ax[i][j+1].set_xticks(np.linspace(0, x[-1], 3, dtype=np.int32))
         cbar = plt.colorbar(im, fraction=0.1, shrink=1, aspect=20, label='Correlation',
-                            orientation='vertical', ax=ax[i][-1], ticks=ticks)
+                            orientation='vertical', ax=ax[i][2], ticks=ticks)
         cbar.ax.set_yticklabels(ticklabels, fontsize=fntsize-1)
+
+        ax[i][-1].plot(R_abs_mean[i], y, 'k', lw=2, label='Trained')
+        ax[i][-1].plot(R_ctrl_abs_mean[i], y, 'm--', lw=1, label='Untrained')
+        ax[i][-1].plot(R_abs_mean[i] - R_ctrl_abs_mean[i], y, 'g', lw=1, label='Diff')
+        ax[i][-1].legend(loc='lower left', bbox_to_anchor=[0.4, 0.025], frameon=False, fontsize=7)
+
+        for j in range(1, cols):
+            for side in 'right','top':
+                ax[i][j].spines[side].set_visible(False)
 
     for i in range(rows):
         for j in range(cols):
@@ -109,12 +114,15 @@ def plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf, idx, sort_F=1.0, vmin=
                 ax[i][j].set_yticklabels([])
             if i < rows-1:
                 ax[i][j].set_xticklabels([])
-            if j > 0:
+            if j in (1,2):
                 ax[-1][j].set_xlabel('Filter #')
-        ax[i][1].set_ylabel('Frequency [Hz]')
+            if j > 0:
+                ax[i][j].set_ylabel('Frequency [Hz]')
+        ax[-1][-1].set_xlabel('Correlation')
     ax[0][1].set_title('Trained network', fontsize=fntsize+1)
     ax[0][2].set_title('Untrained network', fontsize=fntsize+1)
 
+    fig.tight_layout()
     return fig, vmin, vmax
 
 
@@ -155,7 +163,7 @@ if __name__ == '__main__':
     filter_order = 8
     spacing = 'log'
     stop_layer = None
-    sort_F = 1.1
+    sort_freq = 1.1
     vmin, vmax = None, None
 
     while i < n_args:
@@ -182,7 +190,12 @@ if __name__ == '__main__':
             filter_order = int(sys.argv[i+1])
             i += 1
         elif arg == '--sort-f':
-            sort_F = float(sys.argv[i+1])
+            if sys.argv[i+1] == 'no':
+                sort_freq = None
+            else:
+                sort_freq = np.array(list(map(float, sys.argv[i+1].split(','))))
+                if sort_freq.size == 1:
+                    sort_freq = sort_freq[0]
             i += 1
         elif arg == '--stop-layer':
             stop_layer = sys.argv[i+1]
@@ -208,7 +221,7 @@ if __name__ == '__main__':
     if output_file is not None:
         output_file = os.path.splitext(output_file)[0]
 
-    if sort_F <= 0:
+    if sort_freq is not None and np.any(sort_freq <= 0):
         print('Sort frequency must be > 0')
         sys.exit(3)
 
@@ -383,10 +396,11 @@ if __name__ == '__main__':
     # define some variables used here and for the control model below:
     dt = np.diff(t[:2])[0]
     fs = np.round(1/dt)
+    min_freq, max_freq = 0.1, 0.5/dt
     if spacing == 'lin':
-        edges = np.linspace(0.05, 0.5/dt, N_bands+1)
+        edges = np.linspace(min_freq, max_freq, N_bands+1)
     else:
-        edges = np.logspace(np.log10(0.05), np.log10(0.5/dt), N_bands+1)
+        edges = np.logspace(np.log10(min_freq), np.log10(max_freq), N_bands+1)
     edges_ctrl = edges
     bands = [[a,b] for a,b in zip(edges[:-1], edges[1:])]
     N_bands = len(bands)
@@ -410,8 +424,9 @@ if __name__ == '__main__':
         R_ctrl,p_ctrl = compute_correlations(ctrl_model, X[0], fs, bands, effective_RF_size,
                                              effective_stride, filter_order)
         # save everyting
-        np.savez_compressed(output_file + '.npz', R=R, p=p, R_ctrl=R_ctrl, p_ctrl=p_ctrl,
-                            edges=edges, momentum=y.squeeze(), idx=IDX)
+        np.savez_compressed(output_file + '.npz', R=R, p=p, R_ctrl=R_ctrl, p_ctrl=p_ctrl, edges=edges,
+                            exact_momentum=y.squeeze(), pred_momentum=momentum,
+                            pred_momentum_ctrl=reinit_momentum, idx=IDX)
     else:
         data = np.load(output_file + '.npz')
         R, p = data['R'], data['p']
@@ -443,6 +458,6 @@ if __name__ == '__main__':
         F = ret[0]
         Xf = [(ret[1][set_name][i] - m) / (M - m) for i,(m,M) in enumerate(zip(x_train_min_fft,
                                                                                x_train_max_fft))]
-        fig,_,_ = plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf[0], IDX, sort_F=sort_F, vmin=vmin, vmax=vmax)
+        fig,_,_ = plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf[0], IDX, merge_indexes=True, sort_freq=sort_freq, vmin=vmin, vmax=vmax)
         fig.savefig(output_file + '.pdf')
 

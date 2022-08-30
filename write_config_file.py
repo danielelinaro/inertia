@@ -61,8 +61,8 @@ def usage():
     print( '    -f, --force             force overwrite of existing file(s)')
     print( '    -h, --help              print this help message and exit')
     print('')
-    print('inertia can be a (comma-separated list of) scalar(s) or a')
-    print('(semicolon-separated list of) Python expression(s) producing a list of values')
+    print('inertia can be a (comma-separated list of) scalar(s) or a ' +
+          '(semicolon-separated list of) Python expression(s) producing a list of values')
 
 
 if __name__ == '__main__':

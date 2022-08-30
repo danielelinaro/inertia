@@ -654,7 +654,7 @@ def compute_correlations(model, X, fs, bands, effective_RF_size, effective_strid
     X_filt_envel = np.abs(hilbert(X_filt))
     if verbose: print('done.')
 
-    ## Compute the outputs of the last layer before the fully connected layer
+    ## Compute the outputs of the last layer of the model
     layer_name = model.layers[-1].name
     if verbose: my_print(f'Computing the output of layer {layer_name}... ')
     multi_Y = model(X)
