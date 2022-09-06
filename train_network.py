@@ -125,6 +125,21 @@ def main(progname, args, experiment=None):
 
     N_vars, N_training_traces, N_samples = x['training'].shape
 
+    group = config['group'] if 'group' in config else 1
+    if not isinstance(group, int):
+        raise Exception('Not implemented yet')
+    if group > 1:
+        for key in y:
+            idx = np.array([np.where(y[key] == val)[0] for val in np.unique(y[key])])
+            n_groups = idx.shape[0]
+            tmp = y[key].numpy()
+            for i in range(0, n_groups, group):
+                start, stop = i, i + group
+                jdx = np.sort(np.concatenate(idx[start:stop]))
+                means = tmp[jdx,:].mean(axis=0)
+                tmp[jdx,:] = np.tile(means, [jdx.size, 1])
+            y[key] = tf.constant(tmp)
+
     low_high = config['low_high'] if 'low_high' in config else False
     binary_classification = config['loss_function']['name'].lower() == 'binarycrossentropy'
     if low_high or binary_classification:

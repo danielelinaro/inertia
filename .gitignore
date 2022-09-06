@@ -21,3 +21,5 @@ nohup.out
 figures
 area_1_config
 *.json
+*.so
+*.o

@@ -1,6 +1,7 @@
 
 import os
 import signal
+from time import time
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -636,7 +637,7 @@ def compute_correlations(model, X, fs, bands, effective_RF_size, effective_strid
         fd.flush()
 
     from scipy.signal import butter, filtfilt, hilbert
-    from scipy.stats import pearsonr
+    #from scipy.stats import pearsonr
     from tqdm import tqdm
 
     ## Filter the input in a series of bands and compute the signal envelope
@@ -674,15 +675,38 @@ def compute_correlations(model, X, fs, bands, effective_RF_size, effective_strid
         mean_squared_envel[:,:,i] = np.mean(X_filt_envel_sub ** 2, axis=2).T
     if verbose: print('done.')
 
+    try:
+        import ctypes
+        libcorr = ctypes.CDLL(os.path.join('.', 'libcorr.so'))
+        libcorr.pearsonr.argtypes = [ctypes.POINTER(ctypes.c_double),
+                                     ctypes.POINTER(ctypes.c_double),
+                                     ctypes.c_size_t,
+                                     ctypes.POINTER(ctypes.c_double),
+                                     ctypes.POINTER(ctypes.c_double)]
+        pointer = ctypes.POINTER(ctypes.c_double)
+        R_pointer = pointer(ctypes.c_double(0.0))
+        p_pointer = pointer(ctypes.c_double(0.0))
+        def pearsonr(x, y):
+            x = x.copy().astype(np.float64)
+            y = y.copy()
+            x_pointer = x.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+            y_pointer = y.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+            libcorr.pearsonr(x_pointer, y_pointer, x.size, R_pointer, p_pointer)
+            return R_pointer[0], p_pointer[0]
+    except:
+        from scipy.stats import pearsonr
+ 
     ## For each frequency band, compute the correlation between mean squared envelope
     ## of the input (to each receptive field) and the output of each neuron in the layer
     R = np.zeros((N_trials, N_bands, N_filters))
     p = np.zeros((N_trials, N_bands, N_filters))
     if verbose: print('Computing the correlations tensor...')
+    start = time()
     for i in tqdm(range(N_trials)):
         for j in range(N_bands):
             for k in range(N_filters):
                 R[i,j,k], p[i,j,k] = pearsonr(Y[i,:,k], mean_squared_envel[i,j,:])
-
+    stop = time()
+    if verbose: print(f'Elapsed time: {(stop - start):.0f} sec.')
     return R, p
 

@@ -1,5 +1,5 @@
 
-0;95;0cimport os
+import os
 import sys
 import glob
 import pickle
@@ -239,6 +239,7 @@ if __name__ == '__main__':
         sys.exit(4)
 
     network_parameters = pickle.load(open(os.path.join(model_dir, 'parameters.pkl'), 'rb'))
+    group = network_parameters['group'] if 'group' in network_parameters else 1
     low_high = network_parameters['low_high'] if 'low_high' in network_parameters else False
     binary_classification = network_parameters['loss_function']['name'].lower() == 'binarycrossentropy'
     if 'use_fft' in network_parameters and network_parameters['use_fft']:
@@ -315,6 +316,9 @@ if __name__ == '__main__':
     for i,(k,v) in enumerate(effective_stride.items()):
         print(f'{i}. {k} ' + '.' * (20 - len(k)) + ' {:d}'.format(v))
 
+    outputs = [layer.output for layer in model.layers \
+               if layer.name in effective_RF_size.keys() and not isinstance(layer, keras.layers.InputLayer)]
+
     ### Load the data set
     set_name = 'test'
     data_dirs = []
@@ -335,64 +339,6 @@ if __name__ == '__main__':
     X = [(ret[1][set_name][i] - m) / s for i,(m,s) in enumerate(zip(x_train_mean, x_train_std))]
     y = ret[2][set_name]
 
-    if binary_classification:
-        IDX = [np.where(y < y.mean())[0], np.where(y > y.mean())[0]]
-        n_mom_values = len(IDX)
-        y[IDX[0]] = 0
-        y[IDX[1]] = 1
-        classes = [np.round(tf.keras.activations.sigmoid(model.predict(X[0][jdx]))) for jdx in IDX]
-        _,_,accuracy = model.evaluate(tf.squeeze(X[0]), y, verbose=0)
-        print(f'Prediction accuracy (with optimized weights): {accuracy*100:.2f}%.')
-    else:
-        if low_high:
-            below,_ = np.where(y < y.mean())
-            above,_ = np.where(y > y.mean())
-            y[below] = y[below].mean()
-            y[above] = y[above].mean()
-        ### Predict the momentum using the model
-        IDX = [np.where(y == mom)[0] for mom in np.unique(y)]
-        n_mom_values = len(IDX)
-        momentum = [np.squeeze(model.predict(X[0][jdx])) for jdx in IDX]
-        mean_momentum = [m.mean() for m in momentum]
-        stddev_momentum = [m.std() for m in momentum]
-        print('Mean momentum (with optimized weights):', mean_momentum)
-        print(' Std momentum (with optimized weights):', stddev_momentum)
-
-    ### Clone the trained model
-    # This initializes the cloned model with new random weights and will be used in the
-    # following as a control for the correlation analysis
-    #reinit_model = keras.models.clone_model(model)
-    reinit_model = model.__class__.from_config(model.get_config(), custom_objects)
-    if custom_objects is not None:
-        # we have some subclassed layers
-        for i in range(len(model.layers)):
-            reinit_model.layers[i]._name = model.layers[i].name
-    if binary_classification:
-        reinit_model.compile(metrics=['binary_crossentropy', 'acc'])
-        reinit_classes = [np.round(tf.keras.activations.sigmoid(reinit_model.predict(X[0][jdx]))) for jdx in IDX]
-        _,_,reinit_accuracy = reinit_model.evaluate(tf.squeeze(X[0]), y, verbose=0)
-        print(f'Prediction accuracy (with random weights): {reinit_accuracy*100:.2f}%.')
-    else:
-        reinit_momentum = [np.squeeze(reinit_model.predict(X[0][jdx])) for jdx in IDX]
-        mean_reinit_momentum = [m.mean() for m in reinit_momentum]
-        stddev_reinit_momentum = [m.std() for m in reinit_momentum]
-        print('Mean momentum (with random weights):', mean_reinit_momentum)
-        print(' Std momentum (with random weights):', stddev_reinit_momentum)
-
-    ### Build a model with as many outputs as there are convolutional or pooling layers
-    outputs = [layer.output for layer in model.layers \
-               if layer.name in effective_RF_size.keys() and not isinstance(layer, keras.layers.InputLayer)]
-    multi_output_model = keras.Model(inputs=model.inputs, outputs=outputs)
-    # build a control model with the same (multiple-output) architecture as the previous one but random weights:
-    ctrl_outputs = [layer.output for layer in reinit_model.layers \
-                    if layer.name in effective_RF_size.keys() and not isinstance(layer, keras.layers.InputLayer)]
-    ctrl_model = keras.Model(inputs=reinit_model.inputs, outputs=ctrl_outputs)
-    print(f'The model has {len(outputs)} outputs, corresponding to the following layers:')
-    for i,layer in enumerate(multi_output_model.layers):
-        if not isinstance(layer, keras.layers.InputLayer):
-            print(f'    {i}. {layer.name}')
-
-    ### Correlations in the actual model
     # define some variables used here and for the control model below:
     dt = np.diff(t[:2])[0]
     fs = np.round(1/dt)
@@ -404,19 +350,78 @@ if __name__ == '__main__':
     edges_ctrl = edges
     bands = [[a,b] for a,b in zip(edges[:-1], edges[1:])]
     N_bands = len(bands)
-    _, N_neurons, N_filters = multi_output_model.layers[-1].output.shape
+    _, N_neurons, N_filters = outputs[-1].shape
     N_trials = X[0].shape[0]
     if output_file is None:
         output_file = os.path.join(model_dir,
                                    f'correlations_{experiment_ID[:6]}_{N_bands}-bands_' + \
                                    f'{N_filters}-filters_{N_neurons}-neurons_{N_trials}-trials_' + \
-                                   f'{filter_order}-butter_{multi_output_model.layers[-1].name}')
+                                   f'{filter_order}-butter_{outputs[-1].name.split("/")[0]}')
 
-    if os.path.isfile(output_file + '.npz') and not force and not make_plots:
-        print(f'Output file {output_file}.npz exists: re-run with -f if you want to overwrite it')
-        sys.exit(5)
 
     if not os.path.isfile(output_file + '.npz') or force:
+
+        if binary_classification:
+            IDX = [np.where(y < y.mean())[0], np.where(y > y.mean())[0]]
+            y[IDX[0]] = 0
+            y[IDX[1]] = 1
+            classes = [np.round(tf.keras.activations.sigmoid(model.predict(X[0][jdx]))) for jdx in IDX]
+            _,_,accuracy = model.evaluate(tf.squeeze(X[0]), y, verbose=0)
+            print(f'Prediction accuracy (with optimized weights): {accuracy*100:.2f}%.')
+        else:
+            if group > 1:
+                idx = np.array([np.where(y == val)[0] for val in np.unique(y)])
+                n_groups = idx.shape[0]
+                for i in range(0, n_groups, group):
+                    start, stop = i, i + group
+                    jdx = np.sort(np.concatenate(idx[start:stop]))
+                    means = y[jdx,:].mean(axis=0)
+                    y[jdx,:] = np.tile(means, [jdx.size, 1])
+            if low_high:
+                below,_ = np.where(y < y.mean())
+                above,_ = np.where(y > y.mean())
+                y[below] = y[below].mean()
+                y[above] = y[above].mean()
+            ### Predict the momentum using the model
+            IDX = [np.where(y == mom)[0] for mom in np.unique(y)]
+            momentum = [np.squeeze(model.predict(X[0][jdx])) for jdx in IDX]
+            mean_momentum = [m.mean() for m in momentum]
+            stddev_momentum = [m.std() for m in momentum]
+            print('Mean momentum (with optimized weights):', mean_momentum)
+            print(' Std momentum (with optimized weights):', stddev_momentum)
+
+        ### Clone the trained model
+        # This initializes the cloned model with new random weights and will be used in the
+        # following as a control for the correlation analysis
+        #reinit_model = keras.models.clone_model(model)
+        reinit_model = model.__class__.from_config(model.get_config(), custom_objects)
+        if custom_objects is not None:
+            # we have some subclassed layers
+            for i in range(len(model.layers)):
+                reinit_model.layers[i]._name = model.layers[i].name
+        if binary_classification:
+            reinit_model.compile(metrics=['binary_crossentropy', 'acc'])
+            reinit_classes = [np.round(tf.keras.activations.sigmoid(reinit_model.predict(X[0][jdx]))) for jdx in IDX]
+            _,_,reinit_accuracy = reinit_model.evaluate(tf.squeeze(X[0]), y, verbose=0)
+            print(f'Prediction accuracy (with random weights): {reinit_accuracy*100:.2f}%.')
+        else:
+            reinit_momentum = [np.squeeze(reinit_model.predict(X[0][jdx])) for jdx in IDX]
+            mean_reinit_momentum = [m.mean() for m in reinit_momentum]
+            stddev_reinit_momentum = [m.std() for m in reinit_momentum]
+            print('Mean momentum (with random weights):', mean_reinit_momentum)
+            print(' Std momentum (with random weights):', stddev_reinit_momentum)
+
+        ### Build a model with as many outputs as there are convolutional or pooling layers
+        multi_output_model = keras.Model(inputs=model.inputs, outputs=outputs)
+        # build a control model with the same (multiple-output) architecture as the previous one but random weights:
+        ctrl_outputs = [layer.output for layer in reinit_model.layers \
+                        if layer.name in effective_RF_size.keys() and not isinstance(layer, keras.layers.InputLayer)]
+        ctrl_model = keras.Model(inputs=reinit_model.inputs, outputs=ctrl_outputs)
+        print(f'The model has {len(outputs)} outputs, corresponding to the following layers:')
+        for i,layer in enumerate(multi_output_model.layers):
+            if not isinstance(layer, keras.layers.InputLayer):
+                print(f'    {i}. {layer.name}')
+
         # compute the correlations:
         R,p = compute_correlations(multi_output_model, X[0], fs, bands, effective_RF_size,
                                    effective_stride, filter_order)
@@ -427,13 +432,22 @@ if __name__ == '__main__':
         np.savez_compressed(output_file + '.npz', R=R, p=p, R_ctrl=R_ctrl, p_ctrl=p_ctrl, edges=edges,
                             exact_momentum=y.squeeze(), pred_momentum=momentum,
                             pred_momentum_ctrl=reinit_momentum, idx=IDX)
+
+        make_plots = True
+
     else:
-        data = np.load(output_file + '.npz')
-        R, p = data['R'], data['p']
-        R_ctrl, p_ctrl = data['R_ctrl'], data['p_ctrl']
+        if make_plots:
+            data = np.load(output_file + '.npz')
+            R, p = data['R'], data['p']
+            R_ctrl, p_ctrl = data['R_ctrl'], data['p_ctrl']
+            IDX = data['idx']
+        else:
+            print(f'Output file {output_file}.npz exists: re-run with -f if you want to overwrite it')
+            sys.exit(5)
 
     ### Plot the results
     if make_plots:
+        print('Plotting the results...')
         data_files_training = sorted(glob.glob(data_dir + os.path.sep + f'*_training_set.h5'))
         if len(data_files_training) == 0:
             data_files_training = sorted(glob.glob(data_dir + os.path.sep + f'*_test_set.h5'))
