@@ -1,10 +1,11 @@
 #!/bin/bash
 
 subset="no"
-outdir="data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_1_comp_grid/fine"
+outdir="data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_1_comp_grid/coarse"
+confdir="area_1_config_grid_coarse/H_comp11_5.0/diagonal"
 
 i=0
-for config in area_1_config_grid_fine/training*.json ; do
+for config in ${confdir}/training*.json ; do
     logfile=`basename ${config%.json}.log`
     if [ "$subset" = "yes" ] ; then
 	tmp=`basename $config`
@@ -27,7 +28,7 @@ done
 wait
 
 i=0
-for config in area_1_config_grid_fine/test*.json ; do
+for config in ${confdir}/test*.json ; do
     logfile=`basename ${config%.json}.log`
     if [ "$subset" = "yes" ] ; then
 	tmp=`basename $config`
@@ -50,7 +51,7 @@ done
 wait
 
 i=0
-for config in area_1_config_grid_fine/validation*.json ; do
+for config in ${confdir}/validation*.json ; do
     logfile=`basename ${config%.json}.log`
     if [ "$subset" = "yes" ] ; then
 	tmp=`basename $config`

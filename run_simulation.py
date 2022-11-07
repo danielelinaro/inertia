@@ -8,7 +8,8 @@ import numpy as np
 import pypan.ui as pan
 from numpy.random import RandomState, SeedSequence, MT19937
 
-from build_data import BaseParameters, OU, optimize_compensators_set_points, save_compensators_info
+from build_data import BaseParameters, OU, save_compensators_info
+from optimize_compensators_set_points import optimize_compensators_set_points
 
 progname = os.path.basename(sys.argv[0])
 
@@ -80,10 +81,10 @@ if __name__ == '__main__':
 
     # simulation parameters
     srate = config['srate']        # [Hz] sampling rate
-    tstop = config['tstop'][-1]    # [s]  total simulation duration
+    sim_dur = config['tstop'][-1]  # [s]  total simulation duration
     decimation = config['decimation'] if 'decimation' in config else 1
     dt = 1 / srate
-    t = dt + np.r_[0 : tstop + dt/2 : dt]
+    t = dt + np.r_[0 : sim_dur + dt/2 : dt]
     N_samples = t.size
 
     if 'OU' in config:
@@ -134,7 +135,7 @@ if __name__ == '__main__':
         import subprocess
         name_max = int(subprocess.check_output('getconf NAME_MAX /', shell=True))
         output_file = os.path.splitext(os.path.basename(pan_file))[0] + '_' + \
-            '_'.join(['-'.join(map(lambda h: f'{h:.3f}', H)) for H in inertia_values])
+            '_'.join(['-'.join(map(lambda h: f'{h:.3f}', H)) if np.any(H != H[0]) else f'{H[0]:.3f}' for H in inertia_values])
         if len(output_file) > name_max:
             output_file = os.path.splitext(os.path.basename(pan_file))[0] + '_' + \
                 '_'.join(['-'.join(map(lambda h: f'{h:.3f}', np.unique(H))) for H in inertia_values])
@@ -158,8 +159,8 @@ if __name__ == '__main__':
         print('{}: {}: file exists: use -f to overwrite.'.format(progname, output_file))
         sys.exit(2)
 
-    pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
-    pan.alter('Alsrate', 'SRATE',  srate,  libs, annotate=1)
+    pan.alter('Altstop', 'TSTOP',  sim_dur, libs, annotate=1)
+    pan.alter('Alsrate', 'SRATE',  srate,   libs, annotate=1)
 
     for i,bus in enumerate(variable_load_buses):
         exec(f'load_samples_bus_{bus} = np.vstack((t, var_loads[i]))')
@@ -261,7 +262,6 @@ if __name__ == '__main__':
 
     start = 0
     for i, tstop in enumerate(config['tstop']):
-        tran_name = f'Tr{i+1}'
 
         for j, gen_id in enumerate(generator_IDs):
             pan.alter('Alh', 'm', 2 * inertia_values[j,i], libs, instance=gen_id, annotate=1, invalidate=0)
@@ -297,7 +297,7 @@ if __name__ == '__main__':
             fid.root.poles[i,:] = poles
 
         try:
-            data = pan.tran(tran_name, tstop, mem_vars, libs, **kwargs)
+            data = pan.tran(f'Tr{i+1}', tstop, mem_vars, libs, **kwargs)
         except:
             fid.close()
             os.remove(output_file)
@@ -314,7 +314,7 @@ if __name__ == '__main__':
                 if i > 0 and integration_mode == 'trapezoidal':
                     var = var[1:]
                 if isinstance(disk_var, str):
-                    stop = start + var.size
+                    stop = start + var[::decimation].size
                     fid.root[disk_var][start : stop] = var[::decimation] + offset
                 elif isinstance(disk_var, list):
                     disk_var, orig_time_var, resampled_time_var = disk_var

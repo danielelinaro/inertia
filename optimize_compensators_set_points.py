@@ -7,6 +7,8 @@ import numpy as np
 import pypan.ui as pan
 
 
+__all__ = ['optimize_compensators_set_points']
+
 def optimize_compensators_set_points(compensators, pan_libs, Qmax=50, verbose=False):
     def cost(set_points, compensators, pan_libs):
         mem_vars = []

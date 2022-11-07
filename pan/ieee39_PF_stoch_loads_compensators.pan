@@ -1,8 +1,8 @@
 ground electrical gnd
 
 parameter PRAND=1M
-parameter TSTOP=60
-parameter SRATE=40
+parameter TSTOP=300
+parameter SRATE=400
 parameter D=0
 
 parameter Hcomp11 = 0.1 ; inertia of compensator 1 in area 1
@@ -18,25 +18,23 @@ Al_dummy_damping alter param="D"      rt=yes
 #ifdef PAN
 
 Ctrl control begin
-
-    dt = 1/SRATE;
-    T  = [dt:dt:TSTOP+dt];
-
-    load_samples_bus_3  = [ T, randn( length(T) ) ];
-
+    load("mat5", "OU.mat");
 endcontrol
 
-Dc dc nettype=1 print=yes sparse=1
+Al1 alter param="h" value=4.33 instance="G02" invalidate=false
+Dc1 dc nettype=1 print=yes sparse=1
+Pz1 pz nettype=1 mem=["invmtrx"]
+Tr1 tran stop=100 nettype=1 restart=1 annotate=3 method=1 timepoints=1/SRATE forcetps=1 maxiter=65 saman=yes sparse=2
 
-#ifndef LOAD_FLOW_ONLY
+Al2 alter param="h" value=5.0 instance="G02" invalidate=false
+Dc2 dc nettype=1 print=yes sparse=1
+Pz2 pz nettype=1 mem=["invmtrx"]
+Tr2 tran stop=200 nettype=1 restart=0 annotate=3 method=1 timepoints=1/SRATE forcetps=1 maxiter=65 saman=yes sparse=2
 
-Pz pz nettype=1 mem=["invmtrx"]
-
-#ifdef WITH_TRAN
-Tr tran stop=TSTOP nettype=1 restart=1 annotate=3 method=1 timepoints=1/FRAND forcetps=1 maxiter=65 saman=yes sparse=2
-#endif
-
-#endif // LOAD_FLOW_ONLY
+Al3 alter param="h" value=4.0 instance="G02" invalidate=false
+Dc3 dc nettype=1 print=yes sparse=1
+Pz3 pz nettype=1 mem=["invmtrx"]
+Tr3 tran stop=300 nettype=1 restart=0 annotate=3 method=1 timepoints=1/SRATE forcetps=1 maxiter=65 saman=yes sparse=2
 
 #endif // PAN
 
