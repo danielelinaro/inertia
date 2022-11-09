@@ -112,7 +112,7 @@ def main(progname, args, experiment=None):
                                   config['area_measure'],
                                   trial_dur=config['trial_duration'] if 'trial_duration' in config else 60.,
                                   max_block_size=config['max_block_size'] if 'max_block_size' in config else np.inf,
-                                  use_fft=use_fft)
+                                  use_fft=use_fft, verbose=True)
         if use_fft:
             freq = t
             sampling_rate = None
@@ -282,8 +282,8 @@ def main(progname, args, experiment=None):
                         line_numbers.append(tmp)
             experiment.add_tag('IEEE39')
             experiment.add_tag('_'.join([f'area{area_id}' for area_id in config['area_IDs_to_learn_inertia']]))
-            if len(bus_numbers) > 0: experiment.add_tag('buses_' + '_'.join(map(str, bus_numbers)))
-            if len(line_numbers) > 0: experiment.add_tag('lines_' + '_'.join(map(lambda l: f'{l[0]}-{l[1]}', line_numbers)))
+            if len(bus_numbers) > 0: experiment.add_tag('buses_' + '-'.join(map(str, bus_numbers)))
+            if len(line_numbers) > 0: experiment.add_tag('lines_' + '-'.join(map(lambda l: f'{l[0]}-{l[1]}', line_numbers)))
         if binary_classification:
             experiment.add_tag('binary_classification')
         elif low_high:

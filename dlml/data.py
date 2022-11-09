@@ -1,5 +1,7 @@
 
 import os
+import sys
+from time import time as TIME
 import tables
 import numpy as np
 
@@ -61,12 +63,16 @@ def read_area_values(filename, generators_areas_map = None, generators_Pnom = No
 
 
 def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype=np.float32, add_omega_ref=True,
-                   use_fft=False, **kwargs):
+                   use_fft=False, verbose=False, **kwargs):
     """
     This function loads a single data file containing the results of the simulations for one value of inertia
     """
     ext = os.path.splitext(filename)[1]
 
+    if verbose:
+        sys.stdout.write(f'Loading data from `{os.path.basename(filename)}`... ')
+        sys.stdout.flush()
+    t1 = TIME()
     fid = tables.open_file(filename, 'r')
     # do not convert time to dtype here because that gives problems when computing n_samples below
     time = fid.root.time.read()
@@ -74,6 +80,7 @@ def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype
         X = [fid.root[var_name].read(stop=np.min([fid.root[var_name].shape[0], max_num_rows])) for var_name in var_names]
     else:
         X = [fid.root[var_name].read() for var_name in var_names]
+    t2 = TIME()
     if 'omega_ref' in fid.root and add_omega_ref:
         if len(fid.root[var_names[0]].shape) > 1:
             omega_ref = fid.root.omega_ref.read(stop=np.min([fid.root.omega_ref.shape[0], max_num_rows])) - 1
@@ -85,9 +92,11 @@ def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype
     pars = fid.root.parameters.read()
     inertia = pars['inertia'][0]
     generator_IDs = [gen_ID.decode('utf-8') for gen_ID in pars['generator_IDs'][0]]
+    t3 = TIME()
+    if verbose:
+        sys.stdout.write(f'done in {t2-t1:.2f} sec + {t3-t2:.2f} sec.\n')
     fid.close()
-
-    dt = np.diff(time[:2])[0]
+    dt = time[1] - time[0]
     orig_n_trials, orig_n_samples = X[0].shape
     n_samples = int(trial_dur / dt)
     n_trials = orig_n_trials * (orig_n_samples // n_samples)
@@ -125,8 +134,9 @@ def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype
     return freq.astype(dtype), Xf, inertia, generator_IDs
 
 
-def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure, trial_dur=60,
-                    max_block_size=np.inf, dtype=np.float32, use_tf=True, add_omega_ref=True, use_fft=False, **kwargs):
+def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure,
+                    trial_dur=60, max_block_size=np.inf, dtype=np.float32, use_tf=True,
+                    add_omega_ref=True, use_fft=False, verbose=False, **kwargs):
     """
     area_measure - whether Y should contain the inertia of the coi or the total energy of the area
     """
@@ -137,12 +147,18 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
     if area_measure.lower() not in ('inertia', 'energy', 'momentum'):
         raise Exception('area_measure must be one of "inertia", "energy" or "momentum"')
 
+    if verbose:
+        iter_fun = lambda it: it
+    else:
+        from tqdm import tqdm as iter_fun
     n_areas = len(generators_areas_map)
     for key in data_files:
-        for data_file in data_files[key]:
+        if verbose:
+            print(f'Loading data for {key} set...')
+        for data_file in iter_fun(data_files[key]):
             time, x, h, generator_IDs = load_one_block(data_file, var_names, trial_dur,
                                                        max_block_size, dtype, add_omega_ref,
-                                                       use_fft, **kwargs)
+                                                       use_fft, verbose, **kwargs)
             y = np.zeros(n_areas, dtype=dtype)
             for i,area_generators in enumerate(generators_areas_map):
                 num = 0
@@ -175,7 +191,7 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
 
 
 def load_data_generators(folders, generator_IDs, inertia_values, var_names, trial_dur,
-                         max_block_size = np.inf, dtype = np.float32, use_tf = True):
+                         max_block_size=np.inf, dtype=np.float32, use_tf=True, verbose=False):
     # Note: dtype should be a NumPy type, even if use_tf = True
 
     X = {}

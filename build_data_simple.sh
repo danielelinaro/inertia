@@ -2,7 +2,8 @@
 
 subset="no"
 outdir="data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_1_comp_grid/coarse"
-confdir="area_1_config_grid_coarse/H_comp11_5.0/diagonal"
+confdir="area_1_config_grid_coarse/H_comp11_0.1"
+ncores=30
 
 i=0
 for config in ${confdir}/training*.json ; do
@@ -20,7 +21,7 @@ for config in ${confdir}/training*.json ; do
 	sleep 10
     fi
     let i=i+1
-    if [ $i -eq 12 ] ; then
+    if [ $i -eq $ncores ] ; then
 	i=0
 	wait
     fi
@@ -43,7 +44,7 @@ for config in ${confdir}/test*.json ; do
 	sleep 10
     fi
     let i=i+1
-    if [ $i -eq 12 ] ; then
+    if [ $i -eq $ncores ] ; then
 	i=0
 	wait
     fi
@@ -66,7 +67,7 @@ for config in ${confdir}/validation*.json ; do
 	sleep 10
     fi
     let i=i+1
-    if [ $i -eq 12 ] ; then
+    if [ $i -eq $ncores ] ; then
 	i=0
 	wait
     fi
