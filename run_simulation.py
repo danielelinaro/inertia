@@ -240,6 +240,8 @@ if __name__ == '__main__':
 
     try:
         save_compensators_info(fid, config['compensators'], compensators['vg'], compensators['Q'])
+        for (name,bus),vg in zip(config['compensators'].items(), compensators['vg']):
+            pan.alter('Alvg', 'vg', vg, libs, instance=name, annotate=1, invalidate=0)
     except:
         pass
 

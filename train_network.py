@@ -143,7 +143,7 @@ def main(progname, args, experiment=None):
     low_high = config['low_high'] if 'low_high' in config else False
     binary_classification = config['loss_function']['name'].lower() == 'binarycrossentropy'
     if low_high or binary_classification:
-        means = np.mean(y['training'], axis=0)
+        means = tf.math.reduce_mean(y['training'], axis=0)
         for i,mean in enumerate(means):
             for key in y:
                 below,_ = np.where(y[key] <= mean)
@@ -160,10 +160,12 @@ def main(progname, args, experiment=None):
                 y[key] = tf.constant(tmp)
 
     # we always compute mean and std of the training set, whether we'll be using them or not
-    x_train_mean = np.mean(x['training'], axis=(1, 2))
-    x_train_std = np.std(x['training'], axis=(1, 2))
-    x_train_min = np.min(x['training'], axis=(1, 2))
-    x_train_max = np.max(x['training'], axis=(1, 2))
+    x_train_mean = tf.math.reduce_mean(x['training'], axis=(1,2)).numpy()
+    x_train_std = tf.math.reduce_std(x['training'], axis=(1,2)).numpy()
+    x_train_min = tf.math.reduce_min(x['training'], axis=(1,2)).numpy()
+    x_train_max = tf.math.reduce_max(x['training'], axis=(1,2)).numpy()
+    for i,var_name in enumerate(var_names):
+        print(f'{var_name} -> {x_train_mean[i]:g} +- {x_train_std[i]:g}, range: [{x_train_min[i]:g},{x_train_max[i]:g}]')
     if config['normalization'].lower() == 'training_set':
         for key in x:
             if use_fft:

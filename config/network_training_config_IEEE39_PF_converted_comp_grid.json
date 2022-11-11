@@ -34,7 +34,7 @@
 	"dropout_coeff": 0.0
     },
     "low_high": false,
-    "group": 4,
+    "group": 1,
     "loss_function": {
 	"name": "MAE"
     },
