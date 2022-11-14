@@ -1,5 +1,6 @@
 
 import os
+import json
 import signal
 from time import time
 import numpy as np
@@ -571,61 +572,97 @@ def compute_receptive_field(model, stop_layer='', include_stop_layer=False):
         return (stop_layer_name is not None and layer.name == stop_layer_name) or \
             (stop_layer_name is None and isinstance(layer, stop_layer))
 
+    def find_next(layers, layer_name):
+        for i,lyr in enumerate(layers):
+            if len(lyr['inbound_nodes']) == 0:
+                # an input layer: continue
+                continue
+            inbound_nodes_names = [node[0] for node in lyr['inbound_nodes'][0]]
+            if layer_name in inbound_nodes_names:
+                return lyr,layers[i:]
+        return None,None
+
+    def extract_layer_sequence(layers, layer_idx):
+        next_layer,remaining_layers = layers[layer_idx], layers
+        seq = [next_layer['name']]
+        while True:
+            next_layer,remaining_layers = find_next(remaining_layers, next_layer['name'])
+            if next_layer is None:
+                break
+            seq.append(next_layer['name'])
+        return seq
+
+    def find_layer(model, layer_name):
+        for layer in model.layers:
+            if layer.name == layer_name:
+                return layer
+        return None
+
+    arch = json.loads(model.to_json())
+    layers = arch['config']['layers']
+    input_layers_idx = [i for i in range(len(layers)) if len(layers[i]['inbound_nodes']) == 0]
+    sequences = [extract_layer_sequence(layers, idx) for idx in input_layers_idx]
+
     ### compute the effective receptive field size
     effective_RF_size = {}
-    R_prev = 1
-    for k,layer in enumerate(model.layers):
-        if not include_stop_layer and is_stop_layer(layer):
-            break
-        if hasattr(layer, 'kernel_size'):
-            # a convolutional layer
-            if len(layer.kernel_size) > 1:
-                raise Exception('This function only works with 1D convolutional layers')
-            fk = layer.kernel_size[0]
-        elif hasattr(layer, 'pool_size'):
-            # a pooling layer
-            if len(layer.pool_size) > 1:
-                raise Exception('This function only works with 1D pooling layers')
-            fk = layer.pool_size[0]
-        else:
-            fk = None
-        if fk is not None:
-            strides = []
-            for i in range(1, k):
-                try:
-                    strides.append(model.layers[i].strides[0])
-                except:
-                    pass
-            effective_RF_size[layer.name] = R_prev + (fk - 1) * np.prod(strides, dtype=np.int32)
-        else:
-            effective_RF_size[layer.name] = R_prev
-        R_prev = effective_RF_size[layer.name]
-        if is_stop_layer(layer):
-            break
-    
+    for sequence in sequences:
+        R_prev = 1
+        for k,layer_name in enumerate(sequence):
+            layer = find_layer(model, layer_name)
+            if not include_stop_layer and is_stop_layer(layer):
+                break
+            if hasattr(layer, 'kernel_size'):
+                # a convolutional layer
+                if len(layer.kernel_size) > 1:
+                    raise Exception('This function only works with 1D convolutional layers')
+                fk = layer.kernel_size[0]
+            elif hasattr(layer, 'pool_size'):
+                # a pooling layer
+                if len(layer.pool_size) > 1:
+                    raise Exception('This function only works with 1D pooling layers')
+                fk = layer.pool_size[0]
+            else:
+                fk = None
+            if fk is not None:
+                strides = []
+                for i in range(1, k):
+                    try:
+                        strides.append(model.layers[i].strides[0])
+                    except:
+                        pass
+                effective_RF_size[layer.name] = R_prev + (fk - 1) * np.prod(strides, dtype=np.int32)
+            else:
+                effective_RF_size[layer.name] = R_prev
+            R_prev = effective_RF_size[layer.name]
+            if is_stop_layer(layer):
+                break
+
     ### compute the effective stride
-    layers_with_strides = [layer.name for layer in model.layers if hasattr(layer, 'strides')]
-    layer_strides = [layer.strides[0] for layer in model.layers if hasattr(layer, 'strides')]
+    layers_with_strides = [[name for name in seq if hasattr(find_layer(model, name), 'strides')] for seq in sequences]
+    layer_strides = [[find_layer(model, name).strides[0] for name in seq if hasattr(find_layer(model, name), 'strides')] for seq in sequences]
     effective_stride = {}
-    for i,layer in enumerate(model.layers):
-        if not include_stop_layer and is_stop_layer(layer):
-            break
-        if layer.name in layers_with_strides:
-            idx = layers_with_strides.index(layer.name)
-            effective_stride[layer.name] = np.prod(layer_strides[:idx+1])
-        elif i > 0:
-            # a layer with no intrinsic stride has the same stride of the
-            # last previous layer that has a stride
-            for prev_layer in model.layers[i-1::-1]:
-                if prev_layer.name in effective_stride:
-                    effective_stride[layer.name] = effective_stride[prev_layer.name]
-                    break
-        else:
-            # the first layer
-            effective_stride[layer.name] = 1
-        if is_stop_layer(layer):
-            break
-        
+    for i,sequence in enumerate(sequences):
+        for j,layer_name in enumerate(sequence):
+            layer = find_layer(model, layer_name)
+            if not include_stop_layer and is_stop_layer(layer):
+                break
+            if layer.name in layers_with_strides[i]:
+                idx = layers_with_strides[i].index(layer.name)
+                effective_stride[layer.name] = np.prod(layer_strides[i][:idx+1])
+            elif j > 0:
+                # a layer with no intrinsic stride has the same stride of the
+                # last previous layer that has a stride
+                prev_layers = [find_layer(model, name) for name in sequence[j-1::-1]]
+                for prev_layer in prev_layers:
+                    if prev_layer.name in effective_stride:
+                        effective_stride[layer.name] = effective_stride[prev_layer.name]
+                        break
+            else:
+                # the first layer
+                effective_stride[layer.name] = 1
+            if is_stop_layer(layer):
+                break
+
     return effective_RF_size, effective_stride
 
 
