@@ -674,7 +674,6 @@ def compute_correlations(model, X, fs, bands, effective_RF_size, effective_strid
         fd.flush()
 
     from scipy.signal import butter, filtfilt, hilbert
-    #from scipy.stats import pearsonr
     from tqdm import tqdm
 
     ## Filter the input in a series of bands and compute the signal envelope
@@ -682,6 +681,9 @@ def compute_correlations(model, X, fs, bands, effective_RF_size, effective_strid
     N_bands = len(bands)
     # filter the input in various frequency bands
     X_filt = np.zeros((N_bands, N_trials, N_samples))
+    print('  Number of bands:', N_bands)
+    print(' Number of trials:', N_trials)
+    print('Number of samples:', N_samples)
     if verbose: my_print(f'Filtering the input in {N_bands} frequency bands... ')
     for i in range(N_bands):
         b,a = butter(filter_order//2, bands[i], 'bandpass', fs=fs)

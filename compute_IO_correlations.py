@@ -136,7 +136,6 @@ def usage():
     print('    --sort-f         frequency band used to sort the response of the filter (default: 1.1 Hz)')
     print('    --spacing        whether to use a logarithmic or linear spacing for the frequency range')
     print('                     (default "logarithmic", "linear" also accepted)')
-    print('    -o, --output     output file name')
     print('    -f, --force      force overwrite of existing data file')
     print('    --plots          generate plots')
     print('    --order          filter order (default 8)')
@@ -156,7 +155,6 @@ if __name__ == '__main__':
     i = 1
     n_args = len(sys.argv)
 
-    output_file = None
     make_plots = False
     force = False
     N_bands = 20
@@ -168,10 +166,7 @@ if __name__ == '__main__':
 
     while i < n_args:
         arg = sys.argv[i]
-        if arg in ('-o', '--output'):
-            output_file = sys.argv[i+1]
-            i += 1
-        elif arg in ('-f', '--force'):
+        if arg in ('-f', '--force'):
             force = True
         elif arg == '--plots':
             make_plots = True
@@ -213,13 +208,6 @@ if __name__ == '__main__':
     if i == n_args:
         usage()
         sys.exit(1)
-
-    if output_file is not None and os.path.isfile(output_file) and not force and not make_plots:
-        print(f'{output_file} exists: use -f to overwrite')
-        sys.exit(2)
-
-    if output_file is not None:
-        output_file = os.path.splitext(output_file)[0]
 
     if sort_freq is not None and np.any(sort_freq <= 0):
         print('Sort frequency must be > 0')
@@ -303,8 +291,12 @@ if __name__ == '__main__':
 
     ### Compute effective receptive field size and stride
     if stop_layer is None:
-        effective_RF_size,effective_stride = compute_receptive_field(model, stop_layer=keras.layers.Flatten,
-                                                                     include_stop_layer=False)
+        if len(model.inputs) == 1:
+            effective_RF_size,effective_stride = compute_receptive_field(model, stop_layer=keras.layers.Flatten,
+                                                                         include_stop_layer=False)
+        else:
+            effective_RF_size,effective_stride = compute_receptive_field(model, stop_layer=keras.layers.Concatenate,
+                                                                         include_stop_layer=False)
     else:
         effective_RF_size,effective_stride = compute_receptive_field(model, stop_layer=stop_layer,
                                                                      include_stop_layer=True)
@@ -316,22 +308,18 @@ if __name__ == '__main__':
     for i,(k,v) in enumerate(effective_stride.items()):
         print(f'{i}. {k} ' + '.' * (20 - len(k)) + ' {:d}'.format(v))
 
-    outputs = [layer.output for layer in model.layers \
-               if layer.name in effective_RF_size.keys() and not isinstance(layer, keras.layers.InputLayer)]
-
     ### Load the data set
     set_name = 'test'
     data_dirs = []
     for area_ID,data_dir in zip(network_parameters['area_IDs'], network_parameters['data_dirs']):
         data_dirs.append(data_dir.format(area_ID))
-    data_dir = data_dirs[0]
-    data_files = sorted(glob.glob(data_dir + os.path.sep + f'*_{set_name}_set.h5'))
+    data_files = sorted([f for data_dir in data_dirs for f in glob.glob(os.path.join(data_dir, f'*_{set_name}_set.h5'))])
     ret = load_data_areas({set_name: data_files}, network_parameters['var_names'],
                           network_parameters['generators_areas_map'][:1],
                           network_parameters['generators_Pnom'],
                           network_parameters['area_measure'],
                           trial_dur=network_parameters['trial_duration'],
-                          max_block_size=1000,
+                          max_block_size=int(np.ceil(1000/len(data_files))),
                           use_tf=False, add_omega_ref=True,
                           use_fft=False)
     
@@ -350,22 +338,29 @@ if __name__ == '__main__':
     edges_ctrl = edges
     bands = [[a,b] for a,b in zip(edges[:-1], edges[1:])]
     N_bands = len(bands)
-    _, N_neurons, N_filters = outputs[-1].shape
-    N_trials = X[0].shape[0]
-    if output_file is None:
-        output_file = os.path.join(model_dir,
-                                   f'correlations_{experiment_ID[:6]}_{N_bands}-bands_' + \
-                                   f'{N_filters}-filters_{N_neurons}-neurons_{N_trials}-trials_' + \
-                                   f'{filter_order}-butter_{outputs[-1].name.split("/")[0]}')
 
+    # this is not the most robust way of doing this...
+    all_outputs = [[layer.output for layer in model.layers if layer.name in effective_RF_size.keys() \
+                    and layer.name[:len(inp.name)+1] == inp.name + '_' and not isinstance(layer, keras.layers.InputLayer)]
+                   for inp in model.inputs]
 
-    if not os.path.isfile(output_file + '.npz') or force:
+    output_files = []
+    for outputs, x in zip(all_outputs, X):
+        _, N_neurons, N_filters = outputs[-1].shape
+        N_trials = x.shape[0]
+        output_files.append(os.path.join(model_dir,
+                                         f'correlations_{experiment_ID[:6]}_{N_bands}-bands_' + \
+                                         f'{N_filters}-filters_{N_neurons}-neurons_{N_trials}-trials_' + \
+                                         f'{filter_order}-butter_{outputs[-1].name.split("/")[0]}'))
+
+    if any([not os.path.isfile(output_file + '.npz') for output_file in output_files]) or force:
 
         if binary_classification:
             IDX = [np.where(y < y.mean())[0], np.where(y > y.mean())[0]]
             y[IDX[0]] = 0
             y[IDX[1]] = 1
-            classes = [np.round(tf.keras.activations.sigmoid(model.predict(X[0][jdx]))) for jdx in IDX]
+            classes = [np.round(tf.keras.activations.sigmoid(model.predict(
+                [x[jdx][:,:,np.newaxis] for x in X]))) for jdx in IDX]
             _,_,accuracy = model.evaluate(tf.squeeze(X[0]), y, verbose=0)
             print(f'Prediction accuracy (with optimized weights): {accuracy*100:.2f}%.')
         else:
@@ -384,7 +379,7 @@ if __name__ == '__main__':
                 y[above] = y[above].mean()
             ### Predict the momentum using the model
             IDX = [np.where(y == mom)[0] for mom in np.unique(y)]
-            momentum = [np.squeeze(model.predict(X[0][jdx])) for jdx in IDX]
+            momentum = [np.squeeze(model.predict([x[jdx][:,:,np.newaxis] for x in X])) for jdx in IDX]
             mean_momentum = [m.mean() for m in momentum]
             stddev_momentum = [m.std() for m in momentum]
             print('Mean momentum (with optimized weights):', mean_momentum)
@@ -399,64 +394,81 @@ if __name__ == '__main__':
             # we have some subclassed layers
             for i in range(len(model.layers)):
                 reinit_model.layers[i]._name = model.layers[i].name
+
         if binary_classification:
             reinit_model.compile(metrics=['binary_crossentropy', 'acc'])
-            reinit_classes = [np.round(tf.keras.activations.sigmoid(reinit_model.predict(X[0][jdx]))) for jdx in IDX]
-            _,_,reinit_accuracy = reinit_model.evaluate(tf.squeeze(X[0]), y, verbose=0)
+            reinit_classes = [np.round(tf.keras.activations.sigmoid(
+                reinit_model.predict([x[jdx][:,:,np.newaxis] for x in X]))) for jdx in IDX]
+            _,_,reinit_accuracy = reinit_model.evaluate([tf.squeeze(x) for x in X], y, verbose=0)
             print(f'Prediction accuracy (with random weights): {reinit_accuracy*100:.2f}%.')
         else:
-            reinit_momentum = [np.squeeze(reinit_model.predict(X[0][jdx])) for jdx in IDX]
+            reinit_momentum = [np.squeeze(reinit_model.predict([x[jdx][:,:,np.newaxis] for x in X])) for jdx in IDX]
             mean_reinit_momentum = [m.mean() for m in reinit_momentum]
             stddev_reinit_momentum = [m.std() for m in reinit_momentum]
             print('Mean momentum (with random weights):', mean_reinit_momentum)
             print(' Std momentum (with random weights):', stddev_reinit_momentum)
 
-        ### Build a model with as many outputs as there are convolutional or pooling layers
-        multi_output_model = keras.Model(inputs=model.inputs, outputs=outputs)
-        # build a control model with the same (multiple-output) architecture as the previous one but random weights:
-        ctrl_outputs = [layer.output for layer in reinit_model.layers \
-                        if layer.name in effective_RF_size.keys() and not isinstance(layer, keras.layers.InputLayer)]
-        ctrl_model = keras.Model(inputs=reinit_model.inputs, outputs=ctrl_outputs)
-        print(f'The model has {len(outputs)} outputs, corresponding to the following layers:')
-        for i,layer in enumerate(multi_output_model.layers):
-            if not isinstance(layer, keras.layers.InputLayer):
-                print(f'    {i}. {layer.name}')
+        all_ctrl_outputs = [[layer.output for layer in reinit_model.layers if layer.name in effective_RF_size.keys() \
+                             and layer.name[:len(inp.name)+1] == inp.name + '_' and not isinstance(layer, keras.layers.InputLayer)]
+                            for inp in model.inputs]
 
-        # compute the correlations:
-        R,p = compute_correlations(multi_output_model, X[0], fs, bands, effective_RF_size,
-                                   effective_stride, filter_order)
-        # compute the correlations for the control model:
-        R_ctrl,p_ctrl = compute_correlations(ctrl_model, X[0], fs, bands, effective_RF_size,
-                                             effective_stride, filter_order)
-        # save everyting
-        np.savez_compressed(output_file + '.npz', R=R, p=p, R_ctrl=R_ctrl, p_ctrl=p_ctrl, edges=edges,
-                            exact_momentum=y.squeeze(), pred_momentum=momentum,
-                            pred_momentum_ctrl=reinit_momentum, idx=IDX)
+        R, p = [], []
+        R_ctrl, p_ctrl = [], []
+        for inputs, ctrl_inputs, outputs, ctrl_outputs, x, output_file in zip(model.inputs,
+                                                                              reinit_model.inputs,
+                                                                              all_outputs,
+                                                                              all_ctrl_outputs,
+                                                                              X,
+                                                                              output_files):
+            ### Build a model with as many outputs as there are convolutional or pooling layers
+            multi_output_model = keras.Model(inputs=[inputs], outputs=outputs)
+            # build a control model with the same (multiple-output) architecture as the previous one but random weights:
+            ctrl_model = keras.Model(inputs=[ctrl_inputs], outputs=ctrl_outputs)
+            print(f'The model has {len(outputs)} outputs, corresponding to the following layers:')
+            for i,layer in enumerate(multi_output_model.layers):
+                if not isinstance(layer, keras.layers.InputLayer):
+                    print(f'    {i}. {layer.name}')
 
-        make_plots = True
+            # compute the correlations:
+            out = compute_correlations(multi_output_model, x, fs, bands, effective_RF_size,
+                                       effective_stride, filter_order)
+            R.append(out[0])
+            p.append(out[1])
+            # compute the correlations for the control model:
+            out = compute_correlations(ctrl_model, x, fs, bands, effective_RF_size,
+                                       effective_stride, filter_order)
+            R_ctrl.append(out[0])
+            p_ctrl.append(out[1])
+            # save everyting
+            np.savez_compressed(output_file + '.npz', R=R[-1], p=p[-1], R_ctrl=R_ctrl[-1], p_ctrl=p_ctrl[-1],
+                                edges=edges, exact_momentum=y.squeeze(), pred_momentum=momentum,
+                                pred_momentum_ctrl=reinit_momentum, idx=IDX)
+
+            make_plots = True
 
     else:
         if make_plots:
-            data = np.load(output_file + '.npz')
-            R, p = data['R'], data['p']
-            R_ctrl, p_ctrl = data['R_ctrl'], data['p_ctrl']
-            IDX = data['idx']
+            data = [np.load(output_file + '.npz', allow_pickle=True) for output_file in output_files]
+            R, p = [d['R'] for d in data], [d['p'] for d in data]
+            R_ctrl, p_ctrl = [d['R_ctrl'] for d in data], [d['p_ctrl'] for d in data]
+            IDX = data[0]['idx']
+            edges = data[0]['edges']
         else:
-            print(f'Output file {output_file}.npz exists: re-run with -f if you want to overwrite it')
+            print(f'At least one output file exists: re-run with -f if you want to overwrite.')
             sys.exit(5)
 
     ### Plot the results
     if make_plots:
         print('Plotting the results...')
-        data_files_training = sorted(glob.glob(data_dir + os.path.sep + f'*_training_set.h5'))
+        data_files_training = sorted([f for data_dir in data_dirs for f in glob.glob(os.path.join(data_dir, f'*_training_set.h5'))])
         if len(data_files_training) == 0:
-            data_files_training = sorted(glob.glob(data_dir + os.path.sep + f'*_test_set.h5'))
+            data_files_training = sorted([f for data_dir in data_dirs for f in glob.glob(os.path.join(data_dir, f'*_test_set.h5'))])
         ret_fft = load_data_areas({'training': data_files_training}, network_parameters['var_names'],
                                   network_parameters['generators_areas_map'][:1],
                                   network_parameters['generators_Pnom'],
                                   network_parameters['area_measure'],
                                   trial_dur=network_parameters['trial_duration'],
-                                  max_block_size=200,
+                                  max_block_size=50,
                                   use_tf=False, add_omega_ref=True,
                                   use_fft=True)
         x_train_min_fft = np.array([val.min() for val in ret_fft[1]['training']], dtype=np.float32)
@@ -466,12 +478,14 @@ if __name__ == '__main__':
                               network_parameters['generators_Pnom'],
                               network_parameters['area_measure'],
                               trial_dur=network_parameters['trial_duration'],
-                              max_block_size=100,
+                              max_block_size=50,
                               use_tf=False, add_omega_ref=True,
                               use_fft=True, Wn=0) # do not filter the data before computing the FFT
         F = ret[0]
         Xf = [(ret[1][set_name][i] - m) / (M - m) for i,(m,M) in enumerate(zip(x_train_min_fft,
                                                                                x_train_max_fft))]
-        fig,_,_ = plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf[0], IDX, merge_indexes=True, sort_freq=sort_freq, vmin=vmin, vmax=vmax)
-        fig.savefig(output_file + '.pdf')
+        for i,output_file in enumerate(output_files):
+            fig,_,_ = plot_correlations(R[i], p[i], R_ctrl[i], p_ctrl[i], edges, F, Xf[0],
+                                        IDX, merge_indexes=True, sort_freq=sort_freq, vmin=vmin, vmax=vmax)
+            fig.savefig(output_file + '.pdf')
 
