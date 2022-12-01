@@ -314,12 +314,13 @@ if __name__ == '__main__':
     for area_ID,data_dir in zip(network_parameters['area_IDs'], network_parameters['data_dirs']):
         data_dirs.append(data_dir.format(area_ID))
     data_files = sorted([f for data_dir in data_dirs for f in glob.glob(os.path.join(data_dir, f'*_{set_name}_set.h5'))])
+    max_block_size = int(np.ceil(1000/len(data_files)))
     ret = load_data_areas({set_name: data_files}, network_parameters['var_names'],
                           network_parameters['generators_areas_map'][:1],
                           network_parameters['generators_Pnom'],
                           network_parameters['area_measure'],
                           trial_dur=network_parameters['trial_duration'],
-                          max_block_size=int(np.ceil(1000/len(data_files))),
+                          max_block_size=max_block_size,
                           use_tf=False, add_omega_ref=True,
                           use_fft=False)
     
@@ -468,7 +469,7 @@ if __name__ == '__main__':
                                   network_parameters['generators_Pnom'],
                                   network_parameters['area_measure'],
                                   trial_dur=network_parameters['trial_duration'],
-                                  max_block_size=50,
+                                  max_block_size=max_block_size,
                                   use_tf=False, add_omega_ref=True,
                                   use_fft=True)
         x_train_min_fft = np.array([val.min() for val in ret_fft[1]['training']], dtype=np.float32)
@@ -478,7 +479,7 @@ if __name__ == '__main__':
                               network_parameters['generators_Pnom'],
                               network_parameters['area_measure'],
                               trial_dur=network_parameters['trial_duration'],
-                              max_block_size=50,
+                              max_block_size=max_block_size,
                               use_tf=False, add_omega_ref=True,
                               use_fft=True, Wn=0) # do not filter the data before computing the FFT
         F = ret[0]
