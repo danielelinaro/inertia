@@ -488,5 +488,5 @@ if __name__ == '__main__':
         for i,output_file in enumerate(output_files):
             fig,_,_ = plot_correlations(R[i], p[i], R_ctrl[i], p_ctrl[i], edges, F, Xf[0],
                                         IDX, merge_indexes=True, sort_freq=sort_freq, vmin=vmin, vmax=vmax)
-            fig.savefig(output_file + '.pdf')
+            fig.savefig(output_file + f'_sort_F={sort_freq:.2f}.pdf')
 
