@@ -1,9 +1,9 @@
 {
-    "netlist": "pan/ieee39_PF_stoch_loads_compensators.pan",
+    "netlist": "pan/ieee39_PF_stoch_loads_compensators_vsg.pan",
     "inertia": {
 	"G01": [5],
-	"G02": [4.33],
-	"G03": [4.47],
+	"G02": [4.33, 3.83, 4.83],
+	"G03": [4.47, 3.97, 4.97],
 	"G04": [3.57],
 	"G05": [4.33],
 	"G06": [4.35],
@@ -16,6 +16,7 @@
         "Comp31": [0.1]
     },
     "compensators": {"Comp11": "bus8", "Comp21": "bus24", "Comp31": "bus27"},
+    "VSGs": {"VSG03": ["G03", 0.2]},
     "variable_load_buses": [3, 4, 7, 8, 12, 15, 16, 18, 20, 21, 23, 24, 25, 26, 27, 28, 29, 31, 39],
     "OU": {
 	"alpha": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
@@ -25,7 +26,7 @@
     "srate": 400.0,
     "decimation": 10,
     "frequency": 60.0,
-    "tstop": [3600],
+    "tstop": [3600, 7200, 10800],
     "save_var_loads": true,
     "mem_vars_map" : {
 	"time": "time",

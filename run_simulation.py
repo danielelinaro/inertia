@@ -5,6 +5,7 @@ import json
 import argparse as arg
 import tables
 import numpy as np
+import scipy
 import pypan.ui as pan
 from numpy.random import RandomState, SeedSequence, MT19937
 
@@ -24,6 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('--overload', default=None, type=float,
                         help='overload coefficient (overwrites the value in the config file)')
     parser.add_argument('-f', '--force', action='store_true', help='force overwrite of output file')
+    parser.add_argument('--save-ou-to-mat', action='store_true', help='save the OU traces to a MAT file')
     parser.add_argument('--check-stability', action='store_true',
                         help='check that the system is stable by running a pole-zero analysis')
     args = parser.parse_args(args=sys.argv[1:])
@@ -162,8 +164,35 @@ if __name__ == '__main__':
     pan.alter('Altstop', 'TSTOP',  sim_dur, libs, annotate=1)
     pan.alter('Alsrate', 'SRATE',  srate,   libs, annotate=1)
 
+    try:
+        # gen_a is the ''original'' generator, gen_b is the additional one
+        for gen_b,(gen_a,power_frac) in config['split_gen'].items():
+            pg = pan.get_var(gen_a + '.pg')
+            pan.alter('Alpg', 'pg', pg[0] * (1-power_frac), libs, instance=gen_a, annotate=1, invalidate=0)
+            pg = pan.get_var(gen_b + '.pg')
+            pan.alter('Alpg', 'pg', pg[0] * power_frac, libs, instance=gen_b, annotate=1, invalidate=0)
+        with_split_gen = True
+    except:
+        with_split_gen = False
+
+    try:
+        for vsg,(gen,power_frac) in config['VSGs'].items():
+            pg = pan.get_var(gen + '.pg')
+            pan.alter('Alpg', 'pg', pg[0] * (1-power_frac), libs, instance=gen, annotate=1, invalidate=0)
+            pg = pan.get_var(vsg + '.PG')
+            pan.alter('Alpg', 'PG', pg[0] * power_frac, libs, instance=vsg, annotate=1, invalidate=0)
+        with_VSGs = True
+    except:
+        with_VSGs = False
+
+    if args.save_ou_to_mat:
+        data = {}
     for i,bus in enumerate(variable_load_buses):
         exec(f'load_samples_bus_{bus} = np.vstack((t, var_loads[i]))')
+        if args.save_ou_to_mat:
+            data[f'load_samples_bus_{bus}'] = np.vstack((t, var_loads[i])).T
+    if args.save_ou_to_mat:
+        scipy.io.savemat('OU.mat', data)
 
     get_var = lambda data, mem_vars, name: data[mem_vars.index(name)]
 
@@ -266,7 +295,19 @@ if __name__ == '__main__':
     for i, tstop in enumerate(config['tstop']):
 
         for j, gen_id in enumerate(generator_IDs):
-            pan.alter('Alh', 'm', 2 * inertia_values[j,i], libs, instance=gen_id, annotate=1, invalidate=0)
+            if with_VSGs:
+                for vsg,(gen,power_frac) in config['VSGs'].items():
+                    if gen == gen_id:
+                        pan.alter('Alh', 'h',    inertia_values[j,i] * (1-power_frac), libs, instance=gen, annotate=1, invalidate=0)
+                        pan.alter('Alh', 'TA', 2*inertia_values[j,i] * power_frac, libs, instance=vsg, annotate=1, invalidate=0)
+            elif with_split_gen:
+                # gen_a is the ''original'' generator, gen_b is the additional one
+                for gen_b,(gen_a,power_frac) in config['split_gen'].items():
+                    if gen_a == gen_id:
+                        pan.alter('Alh', 'h', inertia_values[j,i] * (1-power_frac), libs, instance=gen_a, annotate=1, invalidate=0)
+                        pan.alter('Alh', 'h', inertia_values[j,i] * power_frac, libs, instance=gen_b, annotate=1, invalidate=0)
+            else:
+                pan.alter('Alh', 'h', inertia_values[j,i], libs, instance=gen_id, annotate=1, invalidate=0)
 
         kwargs = {'nettype': 1, 'annotate': 3, 'restart': 1 if i == 0 else 0}
 
@@ -299,7 +340,14 @@ if __name__ == '__main__':
             fid.root.poles[i,:] = poles
 
         try:
-            data = pan.tran(f'Tr{i+1}', tstop, mem_vars, libs, **kwargs)
+            if with_VSGs and i == 0:
+                kwargs_reduced = kwargs.copy()
+                kwargs_reduced.pop('forcetps')
+                pan.tran('TrA', 10/srate, None, libs, **kwargs_reduced)
+                kwargs['restart'] = 0
+                data = pan.tran(f'Tr{i+1}', tstop, mem_vars, libs, **kwargs)
+            else:
+                data = pan.tran(f'Tr{i+1}', tstop, mem_vars, libs, **kwargs)
         except:
             fid.close()
             os.remove(output_file)
