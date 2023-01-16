@@ -259,6 +259,8 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
     for i in range(1, n_files):
         time.append(fids[i].root.time.read() + time[i-1][-1])
     time = np.concatenate(time)
+    if time[-1] < time[-2]:
+        time = time[:-1]
     dt = time[1] - time[0]
     window_size = int(window_dur / dt)
     window_step_size = int(window_step / dt)
@@ -267,10 +269,10 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
         print(f'Window step size: {window_step_size} samples')
     idx = time > ttran
     N_samples = time.size
-    data = {var_name: np.squeeze(np.concatenate([fid.root[var_name].read() for fid in fids])) for var_name in var_names}
+    data = {var_name: np.squeeze(np.concatenate([fid.root[var_name].read(stop=N_samples) for fid in fids])) for var_name in var_names}
     if add_omega_ref:
         try:
-            omega_ref = np.concatenate([fid.root.omega_ref.read() for fid in fids]) - 1
+            omega_ref = np.concatenate([fid.root.omega_ref.read(stop=N_samples) for fid in fids]) - 1
             for var_name in var_names:
                 if var_name != 'omega_ref' and 'omega' in var_name:
                     data[var_name] += omega_ref
