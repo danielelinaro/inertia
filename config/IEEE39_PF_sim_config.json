@@ -2,8 +2,8 @@
     "netlist": "pan/ieee39_PF_stoch_loads_compensators.pan",
     "inertia": {
 	"G01": [5],
-	"G02": [4.33],
-	"G03": [4.47],
+	"G02": [4.33, 3.83, 4.83],
+	"G03": [4.47, 3.97, 4.97],
 	"G04": [3.57],
 	"G05": [4.33],
 	"G06": [4.35],
@@ -25,7 +25,7 @@
     "srate": 400.0,
     "decimation": 10,
     "frequency": 60.0,
-    "tstop": [3600],
+    "tstop": [3600, 7200, 10800],
     "save_var_loads": true,
     "mem_vars_map" : {
 	"time": "time",

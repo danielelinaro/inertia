@@ -175,14 +175,16 @@ if __name__ == '__main__':
     except:
         with_split_gen = False
 
-    try:
-        for vsg,(gen,power_frac) in config['VSGs'].items():
-            pg = pan.get_var(gen + '.pg')
-            pan.alter('Alpg', 'pg', pg[0] * (1-power_frac), libs, instance=gen, annotate=1, invalidate=0)
-            pg = pan.get_var(vsg + '.PG')
-            pan.alter('Alpg', 'PG', pg[0] * power_frac, libs, instance=vsg, annotate=1, invalidate=0)
+    if 'VSGs' in config:
         with_VSGs = True
-    except:
+        for vsg,val in config['VSGs'].items():
+            if len(val) > 0:
+                gen, power_frac = val
+                pg = pan.get_var(gen + '.pg')
+                pan.alter('Alpg', 'pg', pg[0] * (1-power_frac), libs, instance=gen, annotate=1, invalidate=0)
+                pg = pan.get_var(vsg + '.PG')
+                pan.alter('Alpg', 'PG', pg[0] * power_frac, libs, instance=vsg, annotate=1, invalidate=0)
+    else:
         with_VSGs = False
 
     if args.save_ou_to_mat:
@@ -296,10 +298,15 @@ if __name__ == '__main__':
 
         for j, gen_id in enumerate(generator_IDs):
             if with_VSGs:
-                for vsg,(gen,power_frac) in config['VSGs'].items():
-                    if gen == gen_id:
-                        pan.alter('Alh', 'h',    inertia_values[j,i] * (1-power_frac), libs, instance=gen, annotate=1, invalidate=0)
-                        pan.alter('Alh', 'TA', 2*inertia_values[j,i] * power_frac, libs, instance=vsg, annotate=1, invalidate=0)
+                if gen_id in config['VSGs'].keys():
+                    pan.alter('Alh', 'TA', 2*inertia_values[j,i], libs, instance=gen_id, annotate=1, invalidate=0)
+                else:
+                    for vsg,val in config['VSGs'].items():
+                        if len(val) > 0:
+                            gen,power_frac = val
+                            if gen == gen_id:
+                                pan.alter('Alh', 'h',    inertia_values[j,i] * (1-power_frac), libs, instance=gen, annotate=1, invalidate=0)
+                                pan.alter('Alh', 'TA', 2*inertia_values[j,i] * power_frac, libs, instance=vsg, annotate=1, invalidate=0)
             elif with_split_gen:
                 # gen_a is the ''original'' generator, gen_b is the additional one
                 for gen_b,(gen_a,power_frac) in config['split_gen'].items():

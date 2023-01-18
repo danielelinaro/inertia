@@ -4,6 +4,7 @@ parameter PRAND=1M
 parameter TSTOP=300
 parameter SRATE=400
 parameter D=0
+parameter G3bTYPE=2
 
 parameter Hcomp11 = 0.1 ; inertia of compensator 1 in area 1
 parameter Hcomp21 = 0.1 ; inertia of compensator 1 in area 2
@@ -68,7 +69,18 @@ G03 bus32 avr32 php32 omega32 powergenerator type=6 qlimits=no phtype=1 \
 		xdp=0.4248 xd=1.996 xq=1.896 xds=0.36 xqs=0.36 ra=0 \
 		td0p=5.7 td0s=0.05 tq0s=0.035 xl=0.2432 h=4.47 d=0 xqp=0.7008 tq0p=1.5
 
-G03b bus32b gnd gnd omega32b powergenerator type=2 qlimits=no phtype=1 \
+AVR03b bus32b avr32b poweravr type=2 vrating=1.650000e+04 \
+		ka=5.0 ta=0.06 kf=0.08 tf=1.0 ke=-0.0198 \
+		te=0.5 tr=0.0 vmin=-1.0 vmax=1.0 e1=2.342286 \
+		e2=3.123048 se1=0.13 se2=0.34 
+
+GOV03b php32b omega32b powertg type=3 \
+		r=0.2 t1=0.2 t2=1.0 t3=0.6 k1=0.3 \
+		k2=0.0 t5=0.5 k3=0.25 k4=0.0 t6=0.8 \
+		k5=0.3 k6=0.0 t4=0.6 t7=1.0 k7=0.15 \
+		k8=0.0 uc=-0.3 uo=0.3 pmin=0.0 pmax=1.0 
+
+G03b bus32b avr32b php32b omega32b powergenerator type=G3bTYPE qlimits=no phtype=1 \
 		pg=0.8125 vg=0.9831 prating=8.000000e+08 vrating=1.650000e+04 \
 		qmax=0.7 qmin=-0.3 pmax=0.85 pmin=0.25 \
 		xdp=0.4248 xd=1.996 xq=1.896 xds=0.36 xqs=0.36 ra=0 \

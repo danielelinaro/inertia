@@ -51,6 +51,23 @@ G02 bus31 avr31 php31 omega31 powergenerator type=6 qlimits=no phtype=1 \
 		xdp=0.4879 xd=2.065 xq=1.974 xds=0.35 xqs=0.35 ra=0 \
 		td0p=6.56 td0s=0.05 tq0s=0.035 xl=0.245 h=4.33 d=0 xqp=1.19 tq0p=1.5
 
+AVR03 bus32 avr32 poweravr type=2 vrating=1.650000e+04 \
+		ka=5.0 ta=0.06 kf=0.08 tf=1.0 ke=-0.0198 \
+		te=0.5 tr=0.0 vmin=-1.0 vmax=1.0 e1=2.342286 \
+		e2=3.123048 se1=0.13 se2=0.34 
+
+GOV03 php32 omega32 powertg type=3 \
+		r=0.2 t1=0.2 t2=1.0 t3=0.6 k1=0.3 \
+		k2=0.0 t5=0.5 k3=0.25 k4=0.0 t6=0.8 \
+		k5=0.3 k6=0.0 t4=0.6 t7=1.0 k7=0.15 \
+		k8=0.0 uc=-0.3 uo=0.3 pmin=0.0 pmax=1.0 
+
+G03 bus32 avr32 php32 omega32 powergenerator type=6 qlimits=no phtype=1 \
+		pg=0.8125 vg=0.9831 prating=8.000000e+08 vrating=1.650000e+04 \
+		qmax=0.7 qmin=-0.3 pmax=0.85 pmin=0.25 \
+		xdp=0.4248 xd=1.996 xq=1.896 xds=0.36 xqs=0.36 ra=0 \
+		td0p=5.7 td0s=0.05 tq0s=0.035 xl=0.2432 h=4.47 d=0 xqp=0.7008 tq0p=1.5
+
 AVR04 bus33 avr33 poweravr type=2 vrating=1.650000e+04 \
 		ka=5.0 ta=0.06 kf=0.08 tf=1.0 ke=-0.0525 \
 		te=0.5 tr=0.0 vmin=-1.0 vmax=1.0 e1=2.868069 \
@@ -255,7 +272,9 @@ Line2829 bus28  bus29 powerline utype=1 r=1.666350e+00 x=1.797278e+01 b=2.092004
 
 Trf0230 bus30 bus2  powertransformer r=0.000000e+00 x=1.810000e-01 a=2.090909e+01 kt=1.025000e+00 prating=1.000000e+09 vrating=1.650000e+04
 Trf0631 bus31 bus6  powertransformer r=0.000000e+00 x=1.750000e-01 a=2.090909e+01 kt=1.070000e+00 prating=7.000000e+08 vrating=1.650000e+04
+
 Trf1032 bus32 bus10 powertransformer r=0.000000e+00 x=1.600000e-01 a=2.090909e+01 kt=1.070000e+00 prating=8.000000e+08 vrating=1.650000e+04
+
 Trf1112 bus12 bus11 powertransformer r=4.800000e-03 x=1.304999e-01 a=2.500000e+00 kt=1.006000e+00 prating=3.000000e+08 vrating=1.380000e+05
 Trf1312 bus12 bus13 powertransformer r=4.800000e-03 x=1.304999e-01 a=2.500000e+00 kt=1.006000e+00 prating=3.000000e+08 vrating=1.380000e+05
 Trf1920 bus20 bus19 powertransformer r=6.999999e-03 x=1.380000e-01 a=1.500000e+00 kt=1.060000e+00 prating=1.000000e+09 vrating=2.300000e+05
@@ -285,7 +304,7 @@ Pec12 bus1b  id1  gnd iq1  gnd bus1c  powerec type=5
 
 ; used to give a reference to the electric angular frequency of each bus
 Coi omegacoi powercoi type=2 gen="G02" \
-                  attach="G01" attach="G04" \
+                  attach="G01" attach="G03" attach="G04" \
                   attach="G05" attach="G06" attach="G07" \
                   attach="G08" attach="G09" attach="G10"
 
@@ -310,7 +329,10 @@ PecStochLoad29 bus29 dload29 gnd qload29 gnd powerec type=0
 PecStochLoad31 bus31 dload31 gnd qload31 gnd powerec type=0
 PecStochLoad39 bus39 dload39 gnd qload39 gnd powerec type=0
 
-EcGif  bus32   dx   gnd    qx   gnd           powerec type=0
+Trf1032vsg bus32vsg bus10 powertransformer r=0 x=0.16 a=20.909091 kt=1.07 \
+                          prating=8.000000e+08 vrating=1.650000e+04
+
+EcGif  bus32vsg   dx   gnd    qx   gnd           powerec type=0
 
 end
 
