@@ -1,5 +1,5 @@
 {
-    "netlist": "pan/ieee39_PF_stoch_loads_compensators.pan",
+    "netlist": "pan/ieee39_PF_stoch_loads_compensators_split_vsg.pan",
     "inertia": {
 	"G01": [5],
 	"G02": [4.33, 3.83, 4.83],
@@ -16,6 +16,7 @@
         "Comp31": [0.1]
     },
     "compensators": {"Comp11": "bus8", "Comp21": "bus24", "Comp31": "bus27"},
+    "VSGs": {"VSG03": ["G03", 0.2]},
     "variable_load_buses": [3, 4, 7, 8, 12, 15, 16, 18, 20, 21, 23, 24, 25, 26, 27, 28, 29, 31, 39],
     "OU": {
 	"alpha": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],

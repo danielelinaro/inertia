@@ -3,30 +3,35 @@
 subset="no"
 outdir="data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_1_comp_grid/coarse"
 confdir="area_1_config_grid_coarse/H_comp11_0.1"
-ncores=30
+ncores=36
 
-i=0
-for config in ${confdir}/training*.json ; do
-    logfile=`basename ${config%.json}.log`
-    if [ "$subset" = "yes" ] ; then
-	tmp=`basename $config`
-	num="${tmp:9:3}"
-	if [ "$num" = "001" ] || [ "$num" = "002" ] || [ "$num" = "012" ] || [ "$num" = "013" ] \
-	       || [ "$num" = "109" ] || [ "$num" = "110" ] || [ "$num" = "120" ] || [ "$num" = "121" ] ; then
+for H in 1.0 2.0 3.0 4.0 6.0 ; do
+    confdir="area_1_config_grid_coarse/H_comp11_${H}"
+    i=0
+    for config in ${confdir}/training*.json ; do
+	logfile=`basename ${config%.json}.log`
+	if [ "$subset" = "yes" ] ; then
+	    tmp=`basename $config`
+	    num="${tmp:9:3}"
+	    if [ "$num" = "001" ] || [ "$num" = "002" ] || [ "$num" = "012" ] || [ "$num" = "013" ] \
+		   || [ "$num" = "109" ] || [ "$num" = "110" ] || [ "$num" = "120" ] || [ "$num" = "121" ] ; then
+		python3 build_data.py -s training_set -o $outdir $config > $logfile &
+		sleep 10
+	    fi
+	else
 	    python3 build_data.py -s training_set -o $outdir $config > $logfile &
 	    sleep 10
 	fi
-    else
-	python3 build_data.py -s training_set -o $outdir $config > $logfile &
-	sleep 10
-    fi
-    let i=i+1
-    if [ $i -eq $ncores ] ; then
-	i=0
-	wait
-    fi
+	let i=i+1
+	if [ $i -eq $ncores ] ; then
+	    i=0
+	    wait
+	fi
+    done
+    wait
 done
-wait
+
+exit 0
 
 i=0
 for config in ${confdir}/test*.json ; do
