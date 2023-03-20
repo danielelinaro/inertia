@@ -26,14 +26,6 @@ default_config = {
     'netlist': 'pan/ieee39_PF_stoch_loads_compensators.pan',
     'mem_vars': {
 	'time': 'time',
-	'id1': 'Id_line_1_39',
-	'id3': 'Id_line_3_4',
-	'id14': 'Id_line_14_15',
-	'id16': 'Id_line_16_17',
-	'iq1': 'Iq_line_1_39',
-	'iq3': 'Iq_line_3_4',
-	'iq14': 'Iq_line_14_15',
-	'iq16': 'Iq_line_16_17',
         'bus3:d': 'Vd_bus3',
         'bus3:q': 'Vq_bus3',
         'bus14:d': 'Vd_bus14',
@@ -144,7 +136,6 @@ if __name__ == '__main__':
             H[i,j] = X[j][i]
 
     if H.size == 1:
-        H = H[0,0]
         with_suffix = False
     else:
         with_suffix = True
