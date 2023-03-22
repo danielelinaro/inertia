@@ -1,6 +1,3 @@
 #!/bin/bash
 
-IDs=("474d2016e33b441889ce8b17531487cb" "c6f72abb5e364c4cb7770250e135bd73" "13ea047db0cb40efa3e2743de9b9726e" "f64bde90cab54d1ea770bb21f33c3ed1" "d0e4cb94211c4190828fd8cd856cdd94" "a40658acee3c4e419c0ee34d0c59f4df")
-for ID in ${IDs[@]} ; do
-    rsync -avzhu --exclude layer_outputs.npz daniele@pc-poli:/home/daniele/Research/deep-power/experiments/neural_network/$ID experiments/neural_network
-done
+rsync -avzhu --exclude layer_outputs.npz daniele@ws-poli:/home/daniele/Research/deep-power/experiments/neural_network experiments

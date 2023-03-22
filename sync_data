@@ -1,6 +1,4 @@
 #!/bin/bash
 
-rsync -avzhu --exclude *WRONG daniele@ws-poli:/home/daniele/Research/deep-power/data/IEEE39/converted_from_PowerFactory/all_stoch_loads/low_momentum_test_var_G2_G3 \
-      data/IEEE39/converted_from_PowerFactory/all_stoch_loads
-rsync -avzhu --exclude *WRONG daniele@ws-poli:/home/daniele/Research/deep-power/data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_1_comp_grid \
-      data/IEEE39/converted_from_PowerFactory/all_stoch_loads
+rsync -avzhu --exclude *WRONG daniele@ws-poli:/home/daniele/Research/deep-power/data/IEEE39/converted_from_PowerFactory/all_stoch_loads \
+      data/IEEE39/converted_from_PowerFactory
