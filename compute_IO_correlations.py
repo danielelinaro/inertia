@@ -65,7 +65,7 @@ def plot_correlations(R, p, R_ctrl, p_ctrl, edges, F, Xf, idx, merge_indexes=Fal
             ax[i][0].fill_betweenx(F, mean + ci, mean - ci, color=cmap(j))
     for i in range(rows):
         ax[i][0].grid(which='both', axis='y', ls=':', lw=0.5, color=[.6,.6,.6])
-        ax[i][0].set_xlim([0, m*1.05])
+        ax[i][0].set_xlim([0, m*1.2])
         ax[i][0].invert_xaxis()
         ax[i][0].yaxis.tick_right()
         for side in 'left','top':
@@ -309,6 +309,7 @@ if __name__ == '__main__':
         print(f'{i}. {k} ' + '.' * (20 - len(k)) + ' {:d}'.format(v))
 
     ### Load the data set
+    generators_areas_map = [network_parameters['generators_areas_map'][i-1] for i in network_parameters['area_IDs']]
     set_name = 'test'
     data_dirs = []
     for area_ID,data_dir in zip(network_parameters['area_IDs'], network_parameters['data_dirs']):
@@ -316,7 +317,7 @@ if __name__ == '__main__':
     data_files = sorted([f for data_dir in data_dirs for f in glob.glob(os.path.join(data_dir, f'*_{set_name}_set.h5'))])
     max_block_size = int(np.ceil(1000/len(data_files)))
     ret = load_data_areas({set_name: data_files}, network_parameters['var_names'],
-                          network_parameters['generators_areas_map'][:1],
+                          generators_areas_map,
                           network_parameters['generators_Pnom'],
                           network_parameters['area_measure'],
                           trial_dur=network_parameters['trial_duration'],
@@ -465,7 +466,7 @@ if __name__ == '__main__':
         if len(data_files_training) == 0:
             data_files_training = sorted([f for data_dir in data_dirs for f in glob.glob(os.path.join(data_dir, f'*_test_set.h5'))])
         ret_fft = load_data_areas({'training': data_files_training}, network_parameters['var_names'],
-                                  network_parameters['generators_areas_map'][:1],
+                                  generators_areas_map,
                                   network_parameters['generators_Pnom'],
                                   network_parameters['area_measure'],
                                   trial_dur=network_parameters['trial_duration'],
@@ -475,7 +476,7 @@ if __name__ == '__main__':
         x_train_min_fft = np.array([val.min() for val in ret_fft[1]['training']], dtype=np.float32)
         x_train_max_fft = np.array([val.max() for val in ret_fft[1]['training']], dtype=np.float32)
         ret = load_data_areas({set_name: data_files}, network_parameters['var_names'],
-                              network_parameters['generators_areas_map'][:1],
+                              generators_areas_map,
                               network_parameters['generators_Pnom'],
                               network_parameters['area_measure'],
                               trial_dur=network_parameters['trial_duration'],

@@ -431,8 +431,14 @@ def main(progname, args, experiment=None):
     ax[1].set_ylabel('Learning rate')
     ### plot the results obtained with the CNN
     block_size = y['test'].shape[0] // N_entities
-    y_max = np.max(y['training'], axis=0)
-    y_min = np.min(y['training'], axis=0)
+    y_max_train = np.max(y['training'], axis=0)
+    y_min_train = np.min(y['training'], axis=0)
+    y_max_test = np.max(y['test'], axis=0)
+    y_min_test = np.min(y['test'], axis=0)
+    y_max_pred = np.max(y_prediction, axis=0)
+    y_min_pred = np.min(y_prediction, axis=0)
+    y_max = np.max(np.concatenate((y_max_train[np.newaxis,:], y_max_test[np.newaxis,:], y_max_pred[np.newaxis,:]), axis=0), axis=0)
+    y_min = np.min(np.concatenate((y_min_train[np.newaxis,:], y_min_test[np.newaxis,:], y_min_pred[np.newaxis,:]), axis=0), axis=0)
     for i in range(N_entities):
         dy = (y_max[i] - y_min[i]) * 0.05
         limits = [y_min[i] - dy, y_max[i] + dy]
