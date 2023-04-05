@@ -166,7 +166,7 @@ class LearningRateCallback(keras.callbacks.Callback):
             self.experiment.log_metric('learning_rate', lr, self.step)
 
 
-def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation_fun, activation_loc, sampling_rate, pooling_type, count=None):
+def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, kernel_stride, activation_fun, activation_loc, sampling_rate, pooling_type, count=None):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
             raise Exception(f'Unknown activation function "{activation_fun}"')
@@ -175,7 +175,7 @@ def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation
         elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
     base_name = input_layer.name
-    for n,(N_conv,N_pooling,sz) in enumerate(zip(N_units['conv'], N_units['pooling'], kernel_size)):
+    for n,(N_conv,N_pooling,sz,strd) in enumerate(zip(N_units['conv'], N_units['pooling'], kernel_size, kernel_stride)):
         conv_lyr_name = base_name + (f'_conv_{count}_{n+1}' if count is not None else f'_conv_{n+1}')
         activ_lyr_name = base_name + (f'_relu-{count}_{n+1}' if count is not None else f'_relu_{n+1}')
         pool_lyr_name = base_name + (f'_pool_{count}_{n+1}' if count is not None else f'_pool_{n+1}')
@@ -196,9 +196,9 @@ def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation
         else:
             raise Exception(f'Unknown pooling type "{pooling_type}"')
         try:
-            L = layers.Conv1D(filters=N_conv, kernel_size=sz, strides=1, activation=None, name=conv_lyr_name)(L)
+            L = layers.Conv1D(filters=N_conv, kernel_size=sz, strides=strd, activation=None, name=conv_lyr_name)(L)
         except:
-            L = layers.Conv1D(filters=N_conv, kernel_size=sz, strides=1, activation=None, name=conv_lyr_name)(input_layer)
+            L = layers.Conv1D(filters=N_conv, kernel_size=sz, strides=strd, activation=None, name=conv_lyr_name)(input_layer)
         if activation_fun is not None:
             if activation_loc == 'after_conv':
                 L = layers.ReLU(name=activ_lyr_name)(L)
@@ -213,7 +213,7 @@ def make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size, activation
     return L
 
 
-def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, activation_fun, activation_loc, count=None):
+def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, kernel_stride, activation_fun, activation_loc, count=None):
     if activation_fun is not None:
         if activation_fun.lower() not in ('relu',):
             raise Exception(f'Unknown activation function {activation_fun}')
@@ -222,14 +222,14 @@ def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, activation
         elif activation_loc.lower() not in ('after_conv', 'after_pooling'):
             raise Exception('activation_loc must be one of "after_conv" or "after_pooling"')
     base_name = input_layer.name
-    for n,(N_conv,N_pooling,sz) in enumerate(zip(N_units['conv'], N_units['pooling'], kernel_size)):
+    for n,(N_conv,N_pooling,sz,strd) in enumerate(zip(N_units['conv'], N_units['pooling'], kernel_size, kernel_stride)):
         conv_lyr_name = base_name + (f'_conv_{count}_{n+1}' if count is not None else f'_conv_{n+1}')
         activ_lyr_name = base_name + (f'_relu_{count}_{n+1}' if count is not None else f'_relu_{n+1}')
         pool_lyr_name = base_name + (f'_pool_{count}_{n+1}' if count is not None else f'_pool_{n+1}')
         try:
-            L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None, name=conv_lyr_name)(L)
+            L = layers.Conv2D(N_conv, [sz, 2], strides=strd, padding='same', activation=None, name=conv_lyr_name)(L)
         except:
-            L = layers.Conv2D(N_conv, [sz, 2], padding='same', activation=None, name=conv_lyr_name)(input_layer)
+            L = layers.Conv2D(N_conv, [sz, 2], strides=strd, padding='same', activation=None, name=conv_lyr_name)(input_layer)
         if activation_fun is not None:
             if activation_loc == 'after_conv':
                 L = layers.ReLU(name=activ_lyr_name)(L)
@@ -326,6 +326,7 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
     N_units = model_arch['N_units']
     try:
         kernel_size = model_arch['kernel_size']
+        kernel_stride = model_arch['kernel_stride']
         activation_fun = model_arch['preproc_activation']
         activation_loc = model_arch['activation_loc']
         CNN = True
@@ -340,17 +341,18 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
     batch_norm = normalization_strategy.lower() == 'batch'
     normalization_layer = normalization_strategy.lower() == 'layer'
 
-    def make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, sampling_rate, pooling_type, count):
+    def make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride,
+                                  activation_fun, activation_loc, sampling_rate, pooling_type, count):
         if N_dims == 1:
             L = []
             for input_layer in input_layers:
                 lyr = make_preprocessing_pipeline_1D(input_layer, N_units, kernel_size,
-                                                     activation_fun, activation_loc,
+                                                     kernel_stride, activation_fun, activation_loc,
                                                      sampling_rate, pooling_type, count)
                 L.append(lyr)
         else:
-            L = make_preprocessing_pipeline_2D(input_layers[0], N_units, kernel_size, \
-                                               activation_fun, activation_loc, count)
+            L = make_preprocessing_pipeline_2D(input_layers[0], N_units, kernel_size,
+                                               kernel_stride, activation_fun, activation_loc, count)
         return L
 
     def make_dense_stream(L, N_units, N_outputs, model_arch, count):
@@ -361,8 +363,10 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
         output = layers.Dense(N_outputs, name=f'predictions_{count}')(L)
         return output
 
-    def make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, N_outputs, model_arch, sampling_rate, pooling_type, count):
-        L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, sampling_rate, pooling_type, count)
+    def make_full_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride, activation_fun,
+                         activation_loc, N_outputs, model_arch, sampling_rate, pooling_type, count):
+        L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride,
+                                      activation_fun, activation_loc, sampling_rate, pooling_type, count)
         if isinstance(L, list):
             if len(L) == 1:
                 L = L[0]
@@ -403,11 +407,12 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
     if CNN:
         if streams_mode == 0:
             # just one stream
-            outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
+            outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride, activation_fun,
                                         activation_loc, N_outputs, model_arch, sampling_rate, pooling_type, 1)]
         elif streams_mode == 1:
             # common preprocessing stream and then one stream of dense layers for each output
-            L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun, activation_loc, sampling_rate, pooling_type, 1)
+            L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride,
+                                          activation_fun, activation_loc, sampling_rate, pooling_type, 1)
             if isinstance(L, list):
                 if len(L) == 1:
                     L = L[0]
@@ -418,7 +423,7 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
 
         elif streams_mode == 2:
             # one preprocessing stream for each output and then one common stream of dense layers
-            L = [make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
+            L = [make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride, activation_fun,
                                            activation_loc, sampling_rate, pooling_type, i+1) for i in range(N_outputs)]
             if isinstance(L[0], list):
                 if len(L[0]) == 1:
@@ -435,7 +440,7 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
 
         elif streams_mode == 3:
             # one full stream for each output
-            outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, activation_fun,
+            outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride, activation_fun,
                                         activation_loc, 1, model_arch, sampling_rate, pooling_type, i+1) for i in range(N_outputs)]
 
     else:

@@ -25,6 +25,9 @@ def main(progname, args, experiment=None):
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='configuration file')
+    parser.add_argument('--pool-units', default=None, type=int, help='number of pooling units (overrides value in configuration file')
+    parser.add_argument('--kernel-size', default=None, type=int, help='kernel sizes (overrides value in configuration file')
+    parser.add_argument('--kernel-stride', default=None, type=int, help='kernel strides (overrides value in configuration file')
     parser.add_argument('-o', '--output-dir',  default='experiments',  type=str, help='output directory')
     parser.add_argument('--area-measure',  default=None,  type=str, help='area measure (overrides value in configuration file)')
     parser.add_argument('--max-cores',  default=None,  type=int, help='maximum number of cores to be used by Keras)')
@@ -41,6 +44,19 @@ def main(progname, args, experiment=None):
         seed = int.from_bytes(fid.read(4), 'little')
     tf.random.set_seed(seed)
     print_msg('Seed: {}'.format(seed))
+
+    def assign_all(lst, value):
+        for i in range(len(lst)):
+            lst[i] = value
+
+    if args.pool_units is not None and args.pool_units > 0:
+        assign_all(config['model_arch']['N_units']['pooling'], args.pool_units)
+
+    if args.kernel_size is not None and args.kernel_size > 0:
+        assign_all(config['model_arch']['kernel_size'], args.kernel_size)
+
+    if args.kernel_stride is not None and args.kernel_stride > 0:
+        assign_all(config['model_arch']['kernel_stride'], args.kernel_stride)
 
     if args.area_measure is not None:
         config['area_measure'] = args.area_measure
@@ -259,6 +275,12 @@ def main(progname, args, experiment=None):
 
     if log_to_comet:
         # add a bunch of tags to the experiment
+        experiment.add_tag('N_conv_units_' + '_'.join(map(str, config['model_arch']['N_units']['conv'])))
+        experiment.add_tag('N_pool_units_' + '_'.join(map(str, config['model_arch']['N_units']['pooling'])))
+        experiment.add_tag('N_dense_units_' + '_'.join(map(str, config['model_arch']['N_units']['dense'])))
+        experiment.add_tag('kernel_sizes_' + '_'.join(map(str, config['model_arch']['kernel_size'])))
+        experiment.add_tag('kernel_strides_' + '_'.join(map(str, config['model_arch']['kernel_stride'])))
+        experiment.add_tag('trial_dur_{:.0f}'.format(config['trial_duration']))
         experiment.add_tag('neural_network')
         experiment.add_tag('area_measure_' + config['area_measure'])
         if 'IEEE14' in config['data_dirs'][0]:
