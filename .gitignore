@@ -1,3 +1,4 @@
+*.tex
 trained_networks
 __pycache__
 .ipynb_checkpoints
