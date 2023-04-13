@@ -1,6 +1,6 @@
 {
     "area_IDs": [1],
-    "data_dirs": ["data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_{}_comp_grid/coarse"],
+    "data_dirs": ["data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_{}_comp_grid/subset_2"],
     "area_IDs_to_learn_inertia": [1],
     "generators_areas_map": [
 	["G02", "G03", "Comp11"],
@@ -14,12 +14,12 @@
         "Comp11": 100e6, "Comp21": 100e6, "Comp31": 100e6
     },
     "area_measure": "momentum",
-    "var_names": ["Vd_bus3", "Vd_bus14", "Vd_bus17", "Vd_bus39"],
+    "var_names": ["Vd_bus3"],
     "use_fft": false,
     "max_block_size": 5000,
     "trial_duration": 60,
     "normalization": "training_set",
-    "comet_experiment_tags": ["converted_from_PowerFactory", "all_stoch_loads", "compensators_in_training", "data_grid"],
+    "comet_experiment_tags": ["converted_from_PowerFactory", "all_stoch_loads", "compensators_in_training", "data_subset", "Vd"],
     "model_arch": {
 	"N_dims": 1,
         "pooling_type": "max",
@@ -31,6 +31,7 @@
 	"preproc_activation": null,
 	"activation_loc": "after_conv",
 	"kernel_size": [5, 5, 5],
+	"kernel_stride": [1, 1, 1],
 	"dropout_coeff": 0.0
     },
     "low_high": false,
