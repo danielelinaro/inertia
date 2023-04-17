@@ -1,10 +1,30 @@
 {
-    "generator_IDs": [1],
-    "data_dirs": ["data/IEEE14/var_H_G{}/IEEE14_D=2_DZA=60.0"],
-    "var_names": ["omega_G{}", "Pe_G{}"],
-    "max_block_size": 1000,
-    "n_estimators": 10,
-    "criterion": "mae",
+    "n_estimators": 100,
+    "criterion": "squared_error",
     "max_depth": null,
-    "n_jobs": -1
+    "max_samples": 10000,
+    "n_jobs": -1,
+    "area_IDs": [1],
+    "data_dirs": ["data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_{}_comp_grid/subset_2"],
+    "area_IDs_to_learn_inertia": [1],
+    "generators_areas_map": [
+	["G02", "G03", "Comp11"],
+	["G04", "G05", "G06", "G07", "Comp21"],
+	["G08", "G09", "G10", "Comp31"],
+	["G01"]
+    ],
+    "generators_Pnom": {
+	"G01": 10000e6, "G02": 700e6, "G03": 800e6, "G04":  800e6, "G05":  300e6,
+	"G06":   800e6, "G07": 700e6, "G08": 700e6, "G09": 1000e6, "G10": 1000e6,
+        "Comp11": 100e6, "Comp21": 100e6, "Comp31": 100e6
+    },
+    "area_measure": "momentum",
+    "var_names": ["Vd_bus3"],
+    "use_fft": false,
+    "max_block_size": 5000,
+    "trial_duration": 60,
+    "normalization": "training_set",
+    "comet_experiment_tags": ["converted_from_PowerFactory", "all_stoch_loads", "compensators_in_training", "data_subset", "Vd"],
+    "low_high": false,
+    "group": 1
 }
