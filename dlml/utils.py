@@ -56,6 +56,8 @@ def collect_experiments(area_IDs, network_name = 'IEEE39', area_measure = 'momen
     workspace = 'danielelinaro'
     project_name = 'inertia'
 
+    inertia_units = 'GW s'
+
     query = Tag(network_name) & \
             Tag('area_measure_' + area_measure) & \
             Tag('1D_pipeline') & \
