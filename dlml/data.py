@@ -150,7 +150,8 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
     if verbose:
         iter_fun = lambda it: it
     else:
-        from tqdm import tqdm as iter_fun
+        from tqdm import tqdm
+        iter_fun = lambda it: tqdm(it, ascii=True, ncols=70)
     n_areas = len(generators_areas_map)
     for key in data_files:
         if verbose:
