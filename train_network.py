@@ -25,12 +25,12 @@ def main(progname, args, experiment=None):
                                 formatter_class = arg.ArgumentDefaultsHelpFormatter, \
                                 prog = progname)
     parser.add_argument('config_file', type=str, action='store', help='configuration file')
-    parser.add_argument('--pool-units', default=None, type=int, help='number of pooling units (overrides value in configuration file')
-    parser.add_argument('--kernel-size', default=None, type=int, help='kernel sizes (overrides value in configuration file')
-    parser.add_argument('--kernel-stride', default=None, type=int, help='kernel strides (overrides value in configuration file')
+    parser.add_argument('--pool-units', default=None, type=int, help='number of pooling units (overrides value in configuration file)')
+    parser.add_argument('--kernel-size', default=None, type=int, help='kernel sizes (overrides value in configuration file)')
+    parser.add_argument('--kernel-stride', default=None, type=int, help='kernel strides (overrides value in configuration file)')
     parser.add_argument('-o', '--output-dir',  default='experiments',  type=str, help='output directory')
     parser.add_argument('--area-measure',  default=None,  type=str, help='area measure (overrides value in configuration file)')
-    parser.add_argument('--max-cores',  default=None,  type=int, help='maximum number of cores to be used by Keras)')
+    parser.add_argument('--max-cores',  default=None,  type=int, help='maximum number of cores to be used by Keras')
     parser.add_argument('--no-comet', action='store_true', help='do not use CometML to log the experiment')
     args = parser.parse_args(args=args)
 
