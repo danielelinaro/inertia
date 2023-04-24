@@ -252,7 +252,7 @@ def slide_window(X, window_size, overlap=None, window_step_size=None, N_windows=
 
 
 def load_data_slide(data_files, var_names, data_mean = None, data_std = None, window_dur = 60, window_step = 1,
-                    ttran = 0, normalize_sliding=False, add_omega_ref=True, verbose=False):
+                    ttran = 0, tstop = np.inf, normalize_sliding=False, add_omega_ref=True, verbose=False):
     # window_dur and window_step are in units of seconds
     fids = [tables.open_file(data_file, 'r') for data_file in data_files]
     n_files = len(data_files)
@@ -268,9 +268,12 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
     if verbose:
         print(f'Window size: {window_size} samples')
         print(f'Window step size: {window_step_size} samples')
-    idx = time > ttran
+    time = time[time <= tstop]
     N_samples = time.size
-    data = {var_name: np.squeeze(np.concatenate([fid.root[var_name].read(stop=N_samples) for fid in fids])) for var_name in var_names}
+    idx = time > ttran
+    data = {var_name: np.squeeze(np.concatenate([fid.root[var_name].read(stop=N_samples)[idx]
+                                                 for fid in fids])) for var_name in var_names}
+    time = time[idx]
     if add_omega_ref:
         try:
             omega_ref = np.concatenate([fid.root.omega_ref.read(stop=N_samples) for fid in fids]) - 1
@@ -281,10 +284,10 @@ def load_data_slide(data_files, var_names, data_mean = None, data_std = None, wi
             pass
     if not normalize_sliding:
         if data_mean is None:
-            data_mean = {var_name: np.mean(data[var_name][idx]) for var_name in var_names}
+            data_mean = {var_name: np.mean(data[var_name]) for var_name in var_names}
             print(f'data_mean = {data_mean}')
         if data_std is None:
-            data_std = {var_name: np.std(data[var_name][idx]) for var_name in var_names}
+            data_std = {var_name: np.std(data[var_name]) for var_name in var_names}
             print(f'data_std = {data_std}')
         data_normalized = {var_name: (data[var_name] - data_mean[var_name]) / data_std[var_name] for var_name in var_names}
         data_to_split = data_normalized
