@@ -57,16 +57,29 @@ if __name__ == '__main__':
 
     generator_IDs = list(config['inertia'].keys())
     N_generators = len(generator_IDs)
-    N_inertia_values = max(map(len, config['inertia'].values()))
-    inertia_values = []
-    for gen_id in generator_IDs:
-        if len(config['inertia'][gen_id]) == 1:
-            inertia_values.append([config['inertia'][gen_id][0] for _ in range(N_inertia_values)])
-        elif len(config['inertia'][gen_id]) == N_inertia_values:
-            inertia_values.append(config['inertia'][gen_id])
-        else:
-            raise Exception(f'Wrong number of inertia values for generator {gen_id}')
-    inertia_values = np.array(inertia_values)
+
+    def make_values(inp):
+        gen_IDs = list(inp.keys())
+        N_values = max(map(len, inp.values()))
+        values = []
+        for gen_ID in gen_IDs:
+            if len(inp[gen_ID]) == 1:
+                values.append([inp[gen_ID][0] for _ in range(N_values)])
+            elif len(inp[gen_ID]) == N_values:
+                values.append(inp[gen_ID])
+            else:
+                raise Exception(f'Wrong number of values for generator {gen_ID}')
+        return np.array(values)
+
+    inertia_values = make_values(config['inertia'])
+
+    if 'damping' in config:
+        alter_damping = True
+        damping_values = make_values(config['damping'])
+        if damping_values.shape[0] != damping_values.shape[0]:
+            raise Exception('The number of damping values does not match the number of inertia values')
+    else:
+        alter_damping = False
 
     try:
         integration_mode = config['integration_mode'].lower()
@@ -80,6 +93,14 @@ if __name__ == '__main__':
     variable_load_buses = config['variable_load_buses']
     N_variable_loads = len(variable_load_buses)
     N_blocks = len(config['tstop'])
+
+    if N_blocks != inertia_values.shape[1] and (alter_damping and N_blocks != damping_values.shape[1]):
+        raise Exception('The number of simulation blocks does not match the number of inertia and/or damping values.')
+
+    if N_blocks > 1 and inertia_values.shape[1] == 1:
+        inertia_values = np.tile(inertia_values, [1, N_blocks])
+    if alter_damping and (N_blocks > 1 and damping_values.shape[1] == 1):
+        damping_values = np.tile(damping_values, [1, N_blocks])
 
     # simulation parameters
     srate = config['srate']        # [Hz] sampling rate
@@ -204,6 +225,9 @@ if __name__ == '__main__':
         inertia        = tables.Float64Col(shape=(N_generators,N_blocks))
         tstop          = tables.Float64Col(shape=(N_blocks,))
 
+    if alter_damping:
+        Parameters.__dict__['columns']['damping'] = tables.Float64Col(shape=(N_generators,N_blocks))
+
     if 'OU' in config:
         Parameters.__dict__['columns']['rng_seeds'] = tables.Int64Col(shape=(N_variable_loads,))
         Parameters.__dict__['columns']['pan_seeds'] = tables.Float64Col(shape=(N_blocks,)) # these must be floats because they might be NaN's
@@ -221,6 +245,8 @@ if __name__ == '__main__':
     params['F0']             = config['frequency']
     params['srate']          = srate
     params['inertia']        = inertia_values
+    if alter_damping:
+        params['damping']    = damping_values
     params['generator_IDs']  = generator_IDs
     params['var_load_buses'] = variable_load_buses
 
@@ -233,20 +259,6 @@ if __name__ == '__main__':
     elif 'PWL' in config:
         for bus,pwl in zip(variable_load_buses, PWL):
             params[f'PWL_bus_{bus}'] = pwl
-
-    if 'damping' in config:
-        D = config['damping']
-        pan.alter('Ald', 'D', D, libs, annotate=1)
-        params['D'] = D
-    else:
-        params['D'] = np.nan
-
-    if 'DZA' in config:
-        DZA = config['DZA'] / config['frequency']
-        pan.alter('Aldza', 'DZA', DZA, libs, annotate=1)
-        params['DZA'] = DZA
-    else:
-        params['DZA'] = np.nan
 
     if args.overload is not None:
         LAMBDA = args.overload
@@ -315,6 +327,9 @@ if __name__ == '__main__':
                         pan.alter('Alh', 'h', inertia_values[j,i] * power_frac, libs, instance=gen_b, annotate=1, invalidate=0)
             else:
                 pan.alter('Alh', 'h', inertia_values[j,i], libs, instance=gen_id, annotate=1, invalidate=0)
+
+            if alter_damping:
+                pan.alter('Ald', 'd', damping_values[j,i], libs, instance=gen_id, annotate=1, invalidate=0)
 
         kwargs = {'nettype': 1, 'annotate': 3, 'restart': 1 if i == 0 else 0}
 

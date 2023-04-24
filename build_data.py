@@ -22,8 +22,6 @@ generator_ids = {'IEEE14': (1,2,3,6,8), 'two-area': (1,2,3,4)}
 class BaseParameters (tables.IsDescription):
     F0       = tables.Float64Col()
     srate    = tables.Float64Col()
-    D        = tables.Float64Col()
-    DZA      = tables.Float64Col()
     LAMBDA   = tables.Float64Col()
     COEFF    = tables.Float64Col()
 
@@ -200,20 +198,6 @@ if __name__ == '__main__':
     pan.alter('Altstop', 'TSTOP',  tstop,  libs, annotate=1)
     pan.alter('Alsrate', 'SRATE',  srate,  libs, annotate=1)
 
-    # damping coefficient
-    if 'damping' in config:
-        D = config['damping']
-        pan.alter('Ald', 'D', D, libs, annotate=1)
-    else:
-        D = np.nan
-
-    # dead-band width
-    if 'DZA' in config:
-        DZA = config['DZA'] / F0
-        pan.alter('Aldza', 'DZA', DZA, libs, annotate=1)
-    else:
-        DZA = np.nan
-
     # overload coefficient
     if 'lambda' in config:
         LAMBDA = config['lambda']
@@ -300,8 +284,6 @@ if __name__ == '__main__':
         params['alpha']          = alpha
         params['mu']             = mu
         params['c']              = c
-        params['D']              = D
-        params['DZA']            = DZA
         params['LAMBDA']         = LAMBDA
         params['COEFF']          = COEFF
         params['F0']             = F0
