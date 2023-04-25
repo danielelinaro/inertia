@@ -25,8 +25,13 @@
     "var_names": ["Vd_bus3"],
     "normalization": "z-score",
     "use_fft": false,
-    "max_block_size": 1000,
+    "max_block_size": 10000,
     "trial_duration": 60,
-    "comet_experiment_tags": ["converted_from_PowerFactory", "all_stoch_loads", "compensators_in_training", "data_subset", "Vd"],
+    "comet_experiment_tags": ["converted_from_PowerFactory",
+			      "all_stoch_loads",
+			      "compensators_in_training",
+			      "data_subset",
+			      "Vd",
+			      "sklearn"],
     "group": 1
 }

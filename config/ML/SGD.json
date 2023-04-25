@@ -1,11 +1,11 @@
 {
     "model": {
-	"name": "neighbors",
-	"n_neighbors": 10,
-	"weights": "distance",
-	"algorithm": "auto",
-	"metric": "minkowski",
-	"n_jobs": -1
+	"name": "SGD",
+	"loss": "squared_error",
+        "max_iter": 1000,
+	"tol": 1e-3,
+	"early_stopping": true,
+	"n_iter_no_change": 100
     },
     "area_IDs": [1],
     "data_dirs": ["data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_{}_comp_grid/subset_2"],
