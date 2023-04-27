@@ -60,7 +60,6 @@ def collect_experiments(area_IDs, network_name = 'IEEE39', area_measure = 'momen
 
     query = Tag(network_name) & \
             Tag('area_measure_' + area_measure) & \
-            Tag('1D_pipeline') & \
             Tag('_'.join([f'area{ID}' for ID in area_IDs]))
 
     if stoch_load_bus_IDs is not None and len(stoch_load_bus_IDs) > 0:
