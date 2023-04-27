@@ -41,6 +41,8 @@ def main(progname, args, experiment=None):
         model_name = 'ridge'
     elif model['name'].lower() in ('bayes', 'bayesian_ridge'):
         model_name = 'bayesian_ridge'
+    elif model['name'].lower() == 'sgd':
+        model_name = 'SGD'
     elif model['name'].lower() == 'kernel_ridge':
         model_name = 'kernel_ridge'
     elif model['name'].lower() in ('svm', 'svr'):
@@ -228,6 +230,15 @@ def main(progname, args, experiment=None):
     elif model_name == 'bayesian_ridge':
         from sklearn.linear_model import BayesianRidge
         regr = BayesianRidge(verbose=True)
+    elif model_name == 'SGD':
+        from sklearn.linear_model import SGDRegressor
+        regr = SGDRegressor(loss = model['loss'],
+                            max_iter = model['max_iter'],
+                            tol = model['tol'],
+                            random_state = rnd_state,
+                            early_stopping = model['early_stopping'],
+                            n_iter_no_change = model['n_iter_no_change'],
+                            verbose = 3)
     elif model_name == 'kernel_ridge':
         from sklearn.kernel_ridge import KernelRidge
         from sklearn.metrics.pairwise import PAIRWISE_KERNEL_FUNCTIONS
@@ -239,16 +250,7 @@ def main(progname, args, experiment=None):
                            kernel = kernel_name,
                            degree = model['degree'] if 'degree' in model else 3)
     elif model_name == 'SVR':
-        from sklearn.svm import SVR, NuSVR
-        '''
-        regr = SVR(kernel = model['kernel'],
-                   tol = model['tol'],
-                   C = model['C'],
-                   epsilon = model['epsilon'],
-                   cache_size = 1000,
-                   verbose = True,
-                   max_iter = model['max_iter'] if 'max_iter' in model else -1)
-        '''
+        from sklearn.svm import NuSVR
         regr = NuSVR(nu = model['nu'],
                      C = model['C'],
                      kernel = model['kernel'],
@@ -259,12 +261,13 @@ def main(progname, args, experiment=None):
     elif model_name == 'nearest_neighbors':
         from sklearn.neighbors import KNeighborsRegressor
         from sklearn.metrics.pairwise import distance_metrics
-        import tslearn, scipy
+        import scipy
+        from tslearn import metrics as tslearn_metrics
         metric_name = model['metric'] if 'metric' in model else 'minkowski'
         if metric_name in distance_metrics() or hasattr(scipy.spatial.distance, metric_name):
             metric = metric_name
-        elif hasattr(tslearn.metrics, metric_name):
-            metric = getattr(tslearn.metrics, metric_name)
+        elif hasattr(tslearn_metrics, metric_name):
+            metric = getattr(tslearn_metrics, metric_name)
         else:
             print('Unknown metric: {}.'.format(metric_name))
             sys.exit(1)
