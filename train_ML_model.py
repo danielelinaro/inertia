@@ -5,6 +5,7 @@ import glob
 import json
 import argparse as arg
 from time import strftime, localtime
+from time import time as TIME
 import pickle
 import signal
 
@@ -220,7 +221,6 @@ def main(progname, args, experiment=None):
         except:
             pass
 
-
     if model_name == 'linear':
         from sklearn.linear_model import LinearRegression
         regr = LinearRegression(n_jobs = model['n_jobs'] if 'n_jobs' in model else -1)
@@ -309,11 +309,17 @@ def main(progname, args, experiment=None):
     print(regr)
 
     ### train the regressor
+    start = TIME()
     regr.fit(x['training'], y['training'])
+    stop = TIME()
+    timing = {'fit': stop - start}
     regr_params = regr.get_params(deep=True)
 
     ### compute the regressor prediction on the test set
+    start = TIME()
     y_prediction = regr.predict(x['test'])
+    stop = TIME()
+    timing['prediction'] = stop - start
 
     ### compute the mean absolute percentage error on the CNN prediction
     mape_prediction = np.mean(np.abs((y['test'] - y_prediction) / y['test']), axis=0) * 100
@@ -327,6 +333,7 @@ def main(progname, args, experiment=None):
     pickle.dump(parameters, open(output_path + '/parameters.pkl', 'wb'))
     pickle.dump(regr_params, open(output_path + '/regressor_parameters.pkl', 'wb'))
     pickle.dump(test_results, open(output_path + '/test_results.pkl', 'wb'))
+    pickle.dump(timing, open(output_path + '/timing.pkl', 'wb'))
     if args.save_model:
         pickle.dump(regr, open(output_path + '/model.pkl', 'wb'))
 

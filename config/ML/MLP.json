@@ -1,10 +1,10 @@
 {
     "model": {
 	"name": "MLP",
-	"hidden_layer_sizes": [100],
-	"max_iter": 1000,
+	"hidden_layer_sizes": [67],
+	"max_iter": 2000,
 	"early_stopping": true,
-	"n_iter_no_change": 100
+	"n_iter_no_change": 200
     },
     "area_IDs": [1],
     "data_dirs": ["data/IEEE39/converted_from_PowerFactory/all_stoch_loads/var_H_area_{}_comp_grid/subset_2"],
