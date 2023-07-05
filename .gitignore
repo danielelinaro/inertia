@@ -1,3 +1,4 @@
+*.xlsx
 *.parquet.gz
 *.tex
 trained_networks
