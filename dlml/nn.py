@@ -469,7 +469,7 @@ def train_model(model, x, y,
     os.makedirs(checkpoint_dir)
 
     # create a callback that saves the model's weights
-    checkpoint_cb = callbacks.ModelCheckpoint(filepath = os.path.join(checkpoint_dir, 'weights.h5'),
+    checkpoint_cb = callbacks.ModelCheckpoint(filepath = os.path.join(checkpoint_dir, 'weights.keras'),
                                               save_weights_only = False,
                                               save_best_only = True,
                                               monitor = 'val_loss',
