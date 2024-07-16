@@ -242,7 +242,7 @@ def make_preprocessing_pipeline_2D(input_layer, N_units, kernel_size, kernel_str
     return L
 
 
-def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, streams_mode, \
+def build_model(N_samples, steps_per_epoch, var_names, const_var_names, model_arch, N_outputs, streams_mode, \
                 normalization_strategy, loss_fun_pars, optimizer_pars, lr_schedule_pars, sampling_rate):
     """
     Builds and compiles the model
@@ -363,16 +363,18 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
         output = layers.Dense(N_outputs, name=f'predictions_{count}')(L)
         return output
 
-    def make_full_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride, activation_fun,
-                         activation_loc, N_outputs, model_arch, sampling_rate, pooling_type, count):
+    def make_full_stream(input_layers, const_inputs_layer, N_dims, N_units, kernel_size, kernel_stride,
+                         activation_fun, activation_loc, N_outputs, model_arch, sampling_rate, pooling_type, count):
         L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride,
                                       activation_fun, activation_loc, sampling_rate, pooling_type, count)
         if isinstance(L, list):
             if len(L) == 1:
                 L = L[0]
             else:
-                L = layers.concatenate(L, name=f'concat_{count}')
+                L = layers.Concatenate(name=f'concat_{count}')(L)
         L = layers.Flatten(name=f'flatten_{count}')(L)
+        if const_inputs_layer is not None:
+            L = layers.Concatenate(name=f'concat_{count}_const_inputs')([L, const_inputs_layer])
         return make_dense_stream(L, N_units, N_outputs, model_arch, count)
 
     if CNN:
@@ -394,7 +396,12 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
             elif normalization_layer:
                 input_layer = layers.experimental.preprocessing.Normalization()(input_layer)
             input_layers.append(input_layer)
+        if const_var_names is not None and len(const_var_names) > 0:
+            const_inputs_layer = keras.Input(shape=(len(const_var_names),), name='const_inputs')
+        else:
+            const_inputs_layer = None
     else:
+        raise NotImplementedError('Not implemented yet')
         inputs = keras.Input(shape=(N_samples, 2, 1), name='_'.join(var_names))
         if batch_norm:
             input_layer = layers.BatchNormalization()(inputs)
@@ -407,8 +414,8 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
     if CNN:
         if streams_mode == 0:
             # just one stream
-            outputs = [make_full_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride, activation_fun,
-                                        activation_loc, N_outputs, model_arch, sampling_rate, pooling_type, 1)]
+            outputs = [make_full_stream(input_layers, const_inputs_layer, N_dims, N_units, kernel_size, kernel_stride,
+                                        activation_fun, activation_loc, N_outputs, model_arch, sampling_rate, pooling_type, 1)]
         elif streams_mode == 1:
             # common preprocessing stream and then one stream of dense layers for each output
             L = make_preprocessing_stream(input_layers, N_dims, N_units, kernel_size, kernel_stride,
@@ -448,6 +455,8 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
         L = layers.Flatten(name='flatten_inputs')(L)
         outputs = [make_dense_stream(L, N_units, N_outputs, model_arch, 1)]
 
+    if const_inputs_layer is not None:
+        inputs += [const_inputs_layer]
     model = keras.Model(inputs=inputs, outputs=outputs)
     if metrics is None:
         model.compile(optimizer=optimizer, loss=loss)
@@ -456,7 +465,7 @@ def build_model(N_samples, steps_per_epoch, var_names, model_arch, N_outputs, st
     return model, optimizer, loss
 
 
-def train_model(model, x, y,
+def train_model(model, x, xconst, y,
                 N_epochs,
                 batch_size,
                 steps_per_epoch,
@@ -510,8 +519,14 @@ def train_model(model, x, y,
         x_validation = tf.squeeze(x['validation'])
     else:
         input_names = [inp.name.split(':')[0] for inp in model.inputs]
-        x_training = {name: x['training'][i] for i,name in enumerate(input_names)}
-        x_validation = {name: x['validation'][i] for i,name in enumerate(input_names)}
+        x_training,x_validation = {},{}
+        for i,name in enumerate(input_names):
+            if name == 'const_inputs':
+                x_training[name] = xconst['training']
+                x_validation[name] = xconst['validation']
+            else:
+                x_training[name] = x['training'][i]
+                x_validation[name] = x['validation'][i]
 
     return model.fit(x_training,
                      y['training'],
