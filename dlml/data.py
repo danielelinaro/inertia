@@ -67,6 +67,8 @@ def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype
     """
     This function loads a single data file containing the results of the simulations for one value of inertia
     """
+    # array names in H5 files cannot contain '-' and '.'
+    var_names_h5 = list(map(lambda n: n.replace('-','_').replace('.','_'), var_names))
     ext = os.path.splitext(filename)[1]
 
     if verbose:
@@ -76,17 +78,17 @@ def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype
     fid = tables.open_file(filename, 'r')
     # do not convert time to dtype here because that gives problems when computing n_samples below
     time = fid.root.time.read()
-    if len(fid.root[var_names[0]].shape) > 1:
-        X = [fid.root[var_name].read(stop=np.min([fid.root[var_name].shape[0], max_num_rows])) for var_name in var_names]
+    if len(fid.root[var_names_h5[0]].shape) > 1:
+        X = [fid.root[var_name].read(stop=np.min([fid.root[var_name].shape[0], max_num_rows])) for var_name in var_names_h5]
     else:
-        X = [fid.root[var_name].read() for var_name in var_names]
+        X = [fid.root[var_name].read() for var_name in var_names_h5]
     t2 = TIME()
     if 'omega_ref' in fid.root and add_omega_ref:
-        if len(fid.root[var_names[0]].shape) > 1:
+        if len(fid.root[var_names_h5[0]].shape) > 1:
             omega_ref = fid.root.omega_ref.read(stop=np.min([fid.root.omega_ref.shape[0], max_num_rows])) - 1
         else:
             omega_ref = fid.root.omega_ref.read() - 1
-        for i,var_name in enumerate(var_names):
+        for i,var_name in enumerate(var_names_h5):
             if var_name != 'omega_ref' and 'omega' in var_name:
                 X[i] += omega_ref
     pars = fid.root.parameters.read()
@@ -135,7 +137,7 @@ def load_one_block(filename, var_names, trial_dur=60, max_num_rows=np.inf, dtype
 
 
 def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom, area_measure,
-                    trial_dur=60, max_block_size=np.inf, dtype=np.float32, use_tf=True,
+                    trial_dur=60, F0=50.0, max_block_size=np.inf, dtype=np.float32, use_tf=True,
                     add_omega_ref=True, use_fft=False, verbose=False, **kwargs):
     """
     area_measure - whether Y should contain the inertia of the coi or the total energy of the area
@@ -165,15 +167,18 @@ def load_data_areas(data_files, var_names, generators_areas_map, generators_Pnom
                 num = 0
                 den = 0
                 for gen_ID in area_generators:
-                    idx = generator_IDs.index(gen_ID)
-                    num += h[idx] * generators_Pnom[gen_ID]
-                    den += generators_Pnom[gen_ID]
+                    try:
+                        idx = generator_IDs.index(gen_ID)
+                        num += h[idx] * generators_Pnom[gen_ID]
+                        den += generators_Pnom[gen_ID]
+                    except:
+                        pass
                 if area_measure.lower() == 'inertia':
                     y[i] = num / den          # [s]
                 elif area_measure.lower() == 'energy':
                     y[i] = num * 1e-9         # [GW s]
                 elif area_measure.lower() == 'momentum':
-                    y[i] = 2 * num * 1e-9 / 60.  # [GW s^2]
+                    y[i] = 2 * num * 1e-9 / F0  # [GW s^2]
             y = np.tile(y, [x.shape[1], 1])
             try:
                 X[key] = np.concatenate((X[key], x), axis=1)

@@ -16,7 +16,7 @@ from tensorflow import keras
 from tensorflow.keras import layers, losses, models
 
 from dlml.data import load_data_areas
-from dlml.nn import LEARNING_RATE, build_model, train_model, sigint_handler
+from dlml.nn import CHECKPOINT_FILENAME, LEARNING_RATE, build_model, train_model, sigint_handler
 from dlml.utils import print_msg, print_warning, print_error
 
 def main(progname, args, experiment=None):
@@ -73,7 +73,7 @@ def main(progname, args, experiment=None):
         else:
             print_warning('Maximum number of cores must be positive.')
 
-    log_to_comet = not args.no_comet
+    log_to_comet = not args.no_comet and False
     if not log_to_comet and experiment is not None:
         print_warning('Ignoring the --no-comet option since the `experiment` argument is not None')
         log_to_comet = True
@@ -127,6 +127,7 @@ def main(progname, args, experiment=None):
                                   config['generators_Pnom'],
                                   config['area_measure'],
                                   trial_dur=config['trial_duration'] if 'trial_duration' in config else 60.,
+                                  F0=config['F0'] if 'F0' in config else 50.,
                                   max_block_size=config['max_block_size'] if 'max_block_size' in config else np.inf,
                                   use_fft=use_fft, verbose=True)
         if use_fft:
@@ -218,9 +219,11 @@ def main(progname, args, experiment=None):
     optimizer_pars = config['optimizer'][config['optimizer']['name']]
     optimizer_pars['name'] = config['optimizer']['name']
 
+    const_var_names = None
     model, optimizer, loss = build_model(N_samples,
                                          steps_per_epoch,
                                          var_names,
+                                         const_var_names,
                                          config['model_arch'],
                                          len(config['area_IDs_to_learn_inertia']),
                                          config['use_multiple_streams'] if 'use_multiple_streams' in config else 0,
@@ -359,7 +362,8 @@ def main(progname, args, experiment=None):
 
     ### train the network
     signal.signal(signal.SIGINT, sigint_handler)
-    history = train_model(model, x, y,
+    xconst = None
+    history = train_model(model, x, xconst, y,
                           N_epochs,
                           batch_size,
                           steps_per_epoch,
@@ -370,16 +374,14 @@ def main(progname, args, experiment=None):
 
     checkpoint_path = os.path.join(output_path, 'checkpoints')
     
-    ### find the best model based on the validation loss
-    checkpoint_files = glob.glob(os.path.join(checkpoint_path, '*.h5'))
-    try:
-        val_loss = [float(file[:-3].split('-')[-1]) for file in checkpoint_files]
-        best_checkpoint = checkpoint_files[np.argmin(val_loss)]
-    except:
-        best_checkpoint = checkpoint_files[-1]
+    ### the path to the checkpoint file containing the weights of the best model
+    checkpoint_file = os.path.join(checkpoint_path, CHECKPOINT_FILENAME)
+    if not os.path.isfile(checkpoint_file):
+        import ipdb
+        ipdb.set_trace()
 
     try:
-        best_model = models.load_model(best_checkpoint)
+        best_model = models.load_model(checkpoint_file)
     except:
         if pooling_type == 'spectral':
             from dlml.nn import SpectralPooling
@@ -391,7 +393,7 @@ def main(progname, args, experiment=None):
             from dlml.nn import MaxPooling1DWithArgmax
             custom_objects = {'MaxPooling1DWithArgmax': MaxPooling1DWithArgmax}
         with keras.utils.custom_object_scope(custom_objects):
-            best_model = models.load_model(best_checkpoint)
+            best_model = models.load_model(checkpoint_file)
 
     ### compute the network prediction on the test set
     if len(model.inputs) == 1:

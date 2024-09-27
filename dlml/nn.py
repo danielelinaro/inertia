@@ -7,18 +7,17 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, losses, optimizers, callbacks
-import tensorflow_addons as tfa
 
 from .utils import print_msg, print_warning
 
 
-__all__ = ['LEARNING_RATE', 'LearningRateCallback', 'make_preprocessing_pipeline_1D',
+__all__ = ['CHECKPOINT_FILENAME', 'LEARNING_RATE', 'LearningRateCallback', 'make_preprocessing_pipeline_1D',
            'make_preprocessing_pipeline_2D', 'build_model', 'train_model', 'predict',
            'sigint_handler', 'SpectralPooling', 'DownSampling1D', 'MaxPooling1DWithArgmax',
            'compute_receptive_field', 'compute_correlations']
 
+CHECKPOINT_FILENAME = 'weights.keras'
 LEARNING_RATE = []
-
 
 class SpectralPooling(keras.layers.Layer):
     def __init__(self, sampling_rate, cutoff_frequency, **kwargs):
@@ -143,7 +142,8 @@ def sigint_handler(sig, frame):
 
 class SigIntHandlerCallback(keras.callbacks.Callback):
     def __init__(self, model):
-        self.model = model
+        super(SigIntHandlerCallback, self).__init__()
+        self.set_model(model)
 
     def on_epoch_end(self, batch, logs=None):
         self.model.stop_training = TERMINATE_TF
@@ -151,7 +151,8 @@ class SigIntHandlerCallback(keras.callbacks.Callback):
 
 class LearningRateCallback(keras.callbacks.Callback):
     def __init__(self, model, experiment = None):
-        self.model = model
+        super(LearningRateCallback, self).__init__()
+        self.set_model(model)
         self.experiment = experiment
         self.step = 0
 
@@ -282,6 +283,8 @@ def build_model(N_samples, steps_per_epoch, var_names, const_var_names, model_ar
             #     Cyclical learning rates for training neural networks.
             #     In 2017 IEEE Winter Conference on Applications of Computer Vision (WACV) (pp. 464-472). IEEE.
             #
+            raise NotImplementedError('Tensorflow addons should be replaced')
+            import tensorflow_addons as tfa
             step_sz = steps_per_epoch * lr_schedule_pars['factor']
             learning_rate = tfa.optimizers.Triangular2CyclicalLearningRate(
                 initial_learning_rate = lr_schedule_pars['initial_learning_rate'],
@@ -331,8 +334,8 @@ def build_model(N_samples, steps_per_epoch, var_names, const_var_names, model_ar
         activation_loc = model_arch['activation_loc']
         CNN = True
     except:
-        # will build a simple fully-connected neural network
         CNN = False
+        print('Some CNN parameters are missing, will build a simple fully-connected neural network.')
 
     ### figure out how data should be normalized
     if normalization_strategy not in ('batch', 'layer', 'training_set'):
@@ -478,7 +481,7 @@ def train_model(model, x, xconst, y,
     os.makedirs(checkpoint_dir)
 
     # create a callback that saves the model's weights
-    checkpoint_cb = callbacks.ModelCheckpoint(filepath = os.path.join(checkpoint_dir, 'weights.keras'),
+    checkpoint_cb = callbacks.ModelCheckpoint(filepath = os.path.join(checkpoint_dir, CHECKPOINT_FILENAME),
                                               save_weights_only = False,
                                               save_best_only = True,
                                               monitor = 'val_loss',

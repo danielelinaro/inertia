@@ -321,6 +321,7 @@ if __name__ == '__main__':
                           network_parameters['generators_Pnom'],
                           network_parameters['area_measure'],
                           trial_dur=network_parameters['trial_duration'],
+                          F0=network_parameters['F0'],
                           max_block_size=max_block_size,
                           use_tf=False, add_omega_ref=True,
                           use_fft=False)
@@ -470,6 +471,7 @@ if __name__ == '__main__':
                                   network_parameters['generators_Pnom'],
                                   network_parameters['area_measure'],
                                   trial_dur=network_parameters['trial_duration'],
+                                  F0=network_parameters['F0'],
                                   max_block_size=max_block_size,
                                   use_tf=False, add_omega_ref=True,
                                   use_fft=True)
@@ -480,6 +482,7 @@ if __name__ == '__main__':
                               network_parameters['generators_Pnom'],
                               network_parameters['area_measure'],
                               trial_dur=network_parameters['trial_duration'],
+                              F0=network_parameters['F0'],
                               max_block_size=max_block_size,
                               use_tf=False, add_omega_ref=True,
                               use_fft=True, Wn=0) # do not filter the data before computing the FFT

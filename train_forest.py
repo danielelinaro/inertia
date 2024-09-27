@@ -101,6 +101,7 @@ def main(progname, args, experiment=None):
                                   config['generators_Pnom'],
                                   config['area_measure'],
                                   trial_dur=config['trial_duration'] if 'trial_duration' in config else 60.,
+                                  F0=config['F0'] if 'F0' in config else 50.,
                                   max_block_size=config['max_block_size'] if 'max_block_size' in config else np.inf,
                                   use_fft=use_fft, use_tf=False, verbose=True)
         if use_fft:
