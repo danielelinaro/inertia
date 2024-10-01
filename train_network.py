@@ -73,7 +73,7 @@ def main(progname, args, experiment=None):
         else:
             print_warning('Maximum number of cores must be positive.')
 
-    log_to_comet = not args.no_comet and False
+    log_to_comet = not args.no_comet
     if not log_to_comet and experiment is not None:
         print_warning('Ignoring the --no-comet option since the `experiment` argument is not None')
         log_to_comet = True
@@ -104,8 +104,16 @@ def main(progname, args, experiment=None):
 
     N_entities = len(entity_IDs)
 
+    def parse_list_or_str(value, key, base_dir='.'):
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            return json.load(open(os.path.join(base_dir, value), 'r'))[key]
+        raise ValueError('value must be either a list or a string')
+
+    data_dirs = parse_list_or_str(config['data_dirs'], 'data_dirs', os.path.dirname(args.config_file))
     ### load the data
-    data_folders = [data_dir.format(ntt_id) for ntt_id in entity_IDs for data_dir in config['data_dirs']]
+    data_folders = [data_dir.format(ntt_id) for ntt_id in entity_IDs for data_dir in data_dirs]
     for data_folder in data_folders:
         if not os.path.isdir(data_folder):
             print_error('{}: {}: no such directory.'.format(progname, data_folder))
@@ -116,7 +124,7 @@ def main(progname, args, experiment=None):
         all_files = [sorted(glob.glob(os.path.join(data_folder, '*' + key + '_set.h5'))) for data_folder in data_folders]
         data_files[key] = [item for sublist in all_files for item in sublist]
 
-    var_names = config['var_names']
+    var_names = parse_list_or_str(config['var_names'], 'var_names', os.path.dirname(args.config_file))
 
     use_fft = config['use_fft'] if 'use_fft' in config else False
     if entity_name == 'area':
