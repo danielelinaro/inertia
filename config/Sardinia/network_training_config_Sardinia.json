@@ -3,7 +3,7 @@
     "batch_size": 128,
     "area_IDs": [1],
     "area_IDs_to_learn_inertia": [1],
-    "data_dirs": "data_dirs_73409.json",
+    "data_dirs": "data_dirs_low_high.json",
     "var_names": "var_names_41920.json",
     "area_measure": "momentum",
     "max_block_size": 5000,
@@ -52,7 +52,7 @@
 	"names": ["early_stopping"],
 	"early_stopping": {
 	    "monitor": "val_loss",
-	    "patience": 300,
+	    "patience": 100,
 	    "mode": "min"
 	},
 	"reduce_on_plateau": {
